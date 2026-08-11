@@ -235,6 +235,8 @@ export const analyseDarkPair = (rawA, rawB, options) => {
     iso: metaA.iso,
     shutter: metaA.shutter,
     cfaPattern: metaA.cfaPattern,
+    rawWidth: metaA.rawWidth,
+    rawHeight: metaA.rawHeight,
     quantisationStep: metaA.quantisation.step,
     curveIsIdentity: metaA.quantisation.linearisationCurve.isIdentity,
     librawVersion: metaA.librawVersion,

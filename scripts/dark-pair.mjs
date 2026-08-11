@@ -3,10 +3,11 @@
  *
  *   node scripts/dark-pair.mjs <A.raw> <B.raw> [cropW] [cropH] [--no-spectra]
  */
-import { readFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { analyseDarkPair } from '../src/analysis/darkPair.mjs';
+import { writeDarkScalarCsv, writeDarkSpectrumCsv } from '../src/output/darkCsv.mjs';
 
 const require = createRequire(import.meta.url);
 const native = require('../native/build/Release/libraw_binding.node');
@@ -162,6 +163,57 @@ if (result.channels[0].spectra) {
 console.log();
 console.log(
   `  timing: decode ${(tOpen - t0).toFixed(0)} ms   analysis ${(tDone - tOpen).toFixed(0)} ms`,
+);
+
+// --- write the files and report what one ISO actually costs on disk ---
+const outDir = args.find((s) => s.startsWith('--out='))?.slice(6) ?? 'out';
+mkdirSync(outDir, { recursive: true });
+
+const meta = {
+  toolVersion: '0.1.0',
+  librawVersion: result.librawVersion,
+  generated: new Date().toISOString(),
+  camera: result.camera,
+  cfaPattern: result.cfaPattern,
+  adcStep: result.quantisationStep,
+  curveIsIdentity: result.curveIsIdentity,
+  rawWidth: result.rawWidth,
+  rawHeight: result.rawHeight,
+  cropW,
+  cropH,
+  planeW: result.channels[0].width,
+  planeH: result.channels[0].height,
+  clipSigma: result.clip.sigma,
+  clipVarianceFactor: result.clip.varianceFactor,
+  window: win,
+};
+
+const entry = { ...result, fileA: basename(pathA), fileB: basename(pathB) };
+const written = [];
+
+const put = (name, text) => {
+  const p = join(outDir, name);
+  writeFileSync(p, text);
+  written.push([name, statSync(p).size]);
+};
+
+put('dark-scalars.csv', writeDarkScalarCsv([entry], meta));
+if (!noSpectra) {
+  put('dark-spectrum-h.csv', writeDarkSpectrumCsv([entry], meta, 'h'));
+  put('dark-spectrum-v.csv', writeDarkSpectrumCsv([entry], meta, 'v'));
+}
+
+console.log();
+console.log(`  written to ${outDir}/`);
+let total = 0;
+for (const [name, size] of written) {
+  total += size;
+  console.log(`    ${name.padEnd(24)} ${(size / 1024).toFixed(1).padStart(9)} KB`);
+}
+console.log(`    ${'TOTAL for one ISO'.padEnd(24)} ${(total / 1024).toFixed(1).padStart(9)} KB`);
+console.log(
+  `    extrapolated to 20 ISOs:  ${((total * 20) / 1048576).toFixed(1)} MB` +
+    `   (scalars grow 20x, spectra add columns)`,
 );
 
 a.close();
