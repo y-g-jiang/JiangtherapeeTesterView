@@ -318,8 +318,12 @@ Napi::Value RawFile::CentreCrop(const Napi::CallbackInfo& info) {
   return result;
 }
 
-// One CFA channel of the visible area as a dense plane, for the 1D spectra.
-// The whole image, not a crop -- that is the point of the spectrum entry.
+// One CFA channel as a dense plane, for the 1D spectra.
+//
+// channelPlane(index, cropW = 0, cropH = 0). A crop of 0 means the whole
+// visible area; otherwise a centred crop of that many *mosaic* pixels, which
+// is how a masked or otherwise unusable border gets excluded. The crop origin
+// is forced to the sensor's CFA phase, so the channel labels never shift.
 Napi::Value RawFile::ChannelPlane(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!unpacked_) {
@@ -332,13 +336,31 @@ Napi::Value RawFile::ChannelPlane(const Napi::CallbackInfo& info) {
         .ThrowAsJavaScriptException();
     return env.Undefined();
   }
+  const int cropW = info.Length() > 1 ? info[1].As<Napi::Number>().Int32Value() : 0;
+  const int cropH = info.Length() > 2 ? info[2].As<Napi::Number>().Int32Value() : 0;
 
   const libraw_data_t& d = processor_.imgdata;
   const int rawW = d.sizes.raw_width;
-  const int x0 = d.sizes.left_margin;
-  const int y0 = d.sizes.top_margin;
-  const int visW = d.sizes.width;
-  const int visH = d.sizes.height;
+  int x0 = d.sizes.left_margin;
+  int y0 = d.sizes.top_margin;
+  int visW = d.sizes.width;
+  int visH = d.sizes.height;
+
+  if (cropW > 0 || cropH > 0) {
+    const int wantW = cropW > 0 ? cropW : visW;
+    const int wantH = cropH > 0 ? cropH : visH;
+    if (wantW > visW || wantH > visH) {
+      Napi::Error::New(env, "channelPlane() crop is larger than the visible image")
+          .ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    // Even offsets keep the CFA phase; even extents keep the four planes the
+    // same size as each other.
+    x0 += ((visW - wantW) / 2) & ~1;
+    y0 += ((visH - wantH) / 2) & ~1;
+    visW = wantW & ~1;
+    visH = wantH & ~1;
+  }
 
   // Index 0..3 addresses the 2x2 CFA cell by position, not by colour name:
   // (0,0) (0,1) (1,0) (1,1). The caller pairs it with cfaPattern to get names.
@@ -362,6 +384,10 @@ Napi::Value RawFile::ChannelPlane(const Napi::CallbackInfo& info) {
   result.Set("data", out);
   result.Set("width", Napi::Number::New(env, planeW));
   result.Set("height", Napi::Number::New(env, planeH));
+  result.Set("x0", Napi::Number::New(env, x0));
+  result.Set("y0", Napi::Number::New(env, y0));
+  result.Set("mosaicWidth", Napi::Number::New(env, visW));
+  result.Set("mosaicHeight", Napi::Number::New(env, visH));
   result.Set("color", Napi::Number::New(env, processor_.COLOR(dy, dx)));
   return result;
 }
