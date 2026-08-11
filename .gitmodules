@@ -1,0 +1,3 @@
+[submodule "native/vendor/LibRaw"]
+	path = native/vendor/LibRaw
+	url = https://github.com/LibRaw/LibRaw.git
