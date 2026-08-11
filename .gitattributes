@@ -1,0 +1,5 @@
+# Store text as LF in the repository regardless of the checkout platform.
+* text=auto eol=lf
+
+# Measurement data is text but must never be rewritten by any filter.
+*.csv text eol=lf
