@@ -65,34 +65,38 @@ if (result.mismatches.length) {
 }
 console.log();
 
+console.log('  MEASURED — this is what the file carries. No correction is applied to it.');
 console.log(
   `  ${'pos'.padEnd(6)} ${'BL(A)'.padStart(10)} ${'BL(B)'.padStart(10)} ` +
     `${'std A'.padStart(8)} ${'std B'.padStart(8)} ${'std D'.padStart(8)} ` +
-    `${'clipped'.padStart(8)} ${'剔除'.padStart(7)} ${'时域RN'.padStart(8)} ${'FPN'.padStart(8)}`,
+    `${'std D 剪切后'.padStart(12)} ${'剔除'.padStart(8)}`,
 );
 for (const c of result.channels) {
+  const m = c.measured;
   console.log(
-    `  ${c.position.padEnd(6)} ${f(c.blackA).padStart(10)} ${f(c.blackB).padStart(10)} ` +
-      `${f(c.stdA, 4).padStart(8)} ${f(c.stdB, 4).padStart(8)} ${f(c.stdDiffRaw, 4).padStart(8)} ` +
-      `${f(c.stdDiffClipped, 4).padStart(8)} ${(c.rejectedFrac * 100).toFixed(3).padStart(6)}% ` +
-      `${f(c.temporalStd, 4).padStart(8)} ${f(c.fpnStd, 4).padStart(8)}`,
+    `  ${c.position.padEnd(6)} ${f(m.blackA).padStart(10)} ${f(m.blackB).padStart(10)} ` +
+      `${f(m.stdA, 4).padStart(8)} ${f(m.stdB, 4).padStart(8)} ${f(m.stdDiffRaw, 4).padStart(8)} ` +
+      `${f(m.stdDiffClipped, 4).padStart(12)} ${String(m.rejected).padStart(8)}`,
   );
 }
 
 console.log();
-const q = result.quantisationStep;
-const sheppard = (s) => {
-  const v = s * s - (q * q) / 12;
-  return v > 0 ? Math.sqrt(v) : NaN;
-};
-console.log(`  Sheppard correction with q = ${q} (q^2/12 = ${((q * q) / 12).toFixed(4)}):`);
+console.log('  DERIVED — screen only, not written out. Plain arithmetic on the row above,');
+console.log('  shown so a bad pair is visible here rather than after it is mailed.');
+console.log(
+  `  ${'pos'.padEnd(6)} ${'时域RN'.padStart(10)} ${'FPN'.padStart(10)} ${'剔除比例'.padStart(10)}`,
+);
 for (const c of result.channels) {
+  const d = c.derived;
   console.log(
-    `  ${c.position.padEnd(6)} 时域RN ${f(c.temporalStd).padStart(8)} -> ` +
-      `${f(sheppard(c.temporalStd)).padStart(8)} DN` +
-      `    (${(((sheppard(c.temporalStd) / c.temporalStd) - 1) * 100).toFixed(2)}%)`,
+    `  ${c.position.padEnd(6)} ${f(d.temporalStd).padStart(10)} ${f(d.fpnStd).padStart(10)} ` +
+      `${(d.rejectedFrac * 100).toFixed(3).padStart(9)}%`,
   );
 }
+console.log(
+  `    时域RN = std D 剪切后 / √2 / √${result.clip.varianceFactor.toFixed(6)}` +
+    `   FPN² = std A(同掩码)² − std D 剪切后²/2`,
+);
 
 if (result.channels[0].spectra) {
   console.log();

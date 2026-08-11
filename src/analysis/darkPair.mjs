@@ -137,9 +137,27 @@ export const analyseDarkPair = (rawA, rawB, options) => {
     const rawDiff = plainStats(fd);
     const clipped = clippedStats(fd);
 
-    // std(D)/sqrt(2), then the clip's own bite put back. Sheppard is NOT
-    // applied here: it needs the quantisation step, it is exactly reversible,
-    // and the raw layer is where the unmodified number belongs.
+    /*
+     * Everything below is split into `measured` and `derived` on purpose.
+     *
+     * `measured` is what goes into the file: numbers this tool is the only
+     * thing in the pipeline able to produce, because they need the pixels.
+     *
+     * `derived` is arithmetic on those numbers -- the /sqrt(2), the clip's
+     * own bite put back, the fixed-pattern subtraction. It is shown on screen
+     * so the operator can see whether a pair looks sane, and it is NOT
+     * written out. Anyone downstream can recompute it, and baking it in would
+     * take that choice away from them.
+     *
+     * Sheppard's correction is not applied anywhere in this tool, by
+     * instruction: it is a correction, it is exactly reversible, and it
+     * belongs to whoever is doing the analysis.
+     *
+     * The clip is the one thing that has to happen here rather than later,
+     * because it needs the individual pixels. So its inputs are all recorded
+     * -- k, the unclipped std, and the rejected count -- and it stays
+     * auditable even though it cannot be undone.
+     */
     const temporal = clipped.std / Math.SQRT2 / Math.sqrt(CLIP_VARIANCE_FACTOR);
 
     /*
@@ -161,18 +179,27 @@ export const analyseDarkPair = (rawA, rawB, options) => {
       width: a.width,
       height: a.height,
       n,
-      blackA: sa.mean,
-      blackB: sb.mean,
-      stdA: sa.std,
-      stdB: sb.std,
-      stdAMasked: saMasked.std,
-      stdDiffRaw: rawDiff.std,
-      stdDiffClipped: clipped.std,
-      rejected: clipped.rejected,
-      rejectedFrac: clipped.rejected / n,
-      temporalStd: temporal,
-      fpnStd: fpnVar > 0 ? Math.sqrt(fpnVar) : null,
-      diffMean: rawDiff.mean,
+
+      /** Written to the file. Needs the pixels; nothing downstream can redo it. */
+      measured: {
+        blackA: sa.mean,
+        blackB: sb.mean,
+        stdA: sa.std,
+        stdB: sb.std,
+        stdAMasked: saMasked.std,
+        stdDiffRaw: rawDiff.std,
+        stdDiffClipped: clipped.std,
+        diffMean: rawDiff.mean,
+        rejected: clipped.rejected,
+        n,
+      },
+
+      /** Screen only. Pure arithmetic on `measured`; recomputable by anyone. */
+      derived: {
+        temporalStd: temporal,
+        fpnStd: fpnVar > 0 ? Math.sqrt(fpnVar) : null,
+        rejectedFrac: clipped.rejected / n,
+      },
     };
 
     if (wantSpectra) {

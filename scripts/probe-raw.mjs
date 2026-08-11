@@ -88,10 +88,10 @@ for (const path of process.argv.slice(2)) {
   );
   if (q.step > 1) {
     console.log(
-      `    step > 1 means the samples were scaled into a wider container. Sheppard's`,
+      `    step > 1 means the samples were scaled into a wider container. Recorded,`,
     );
     console.log(
-      `    correction uses q^2/12 = ${((q.step * q.step) / 12).toFixed(2)} DN^2, not 0.083.`,
+      `    not corrected for: q^2/12 would be ${((q.step * q.step) / 12).toFixed(2)} DN^2, not 0.083.`,
     );
   }
 
@@ -109,7 +109,7 @@ for (const path of process.argv.slice(2)) {
     );
     console.log(`      ${curve.ladder.map((p) => `${p.value}:${p.localStep}`).join('  ')}`);
     console.log(
-      `    Sheppard's correction needs q(S) here. The declared compression must say lossy.`,
+      `    No correction is applied here; q(S) is recorded so the analyst can decide.`,
     );
   }
 
