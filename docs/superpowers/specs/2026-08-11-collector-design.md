@@ -37,11 +37,37 @@
 
 ## 3. 运行形态
 
-Electron + React + TypeScript。
+Electron + React + TypeScript，**全本地，运行时不联网**。
 
-**RAW 解码走 WASM，不用原生插件。**理由不是省事：采集端和分析端必须用**同一个解码器**，否则两边对同一个文件的黑电平、位深、CFA 相位的理解可能不一致，而这种不一致会静默地污染所有下游数字。主项目已有 `joraw.wasm` 与 `LibRaw-Wasm`，直接复用。
+### 3.1 RAW 解码：原生 LibRaw，从 GitHub 源码固定版本编译
 
-只需要 **raw mosaic + EXIF**，不需要去马赛克、不需要色彩。LibRaw 的 `unpack()` 就够，跳过 `dcraw_process()`——这是性能的主要来源，25 MP 一张约几百毫秒，四十张十几秒，可以接受。
+一开始我打算复用主项目的 WASM，理由是「采集端与分析端要用同一个解码器」。这个理由不成立，作废：**分析端 ptc-compare 只读 CSV，从不碰 RAW。**会解码的是 Jiangtherapee Online 主项目，而它不在这条流水线上。
+
+真正的决定性事实是另一个：**打包好的 LibRaw-Wasm 给不出 Bayer mosaic。**它的 JS 接口只有 `open` / `metadata` / `imageData`，而 `imageData` 走完整 `dcraw_process()` 出 RGB。要拿 `imgdata.rawdata.raw_image` 必须重新编译并加绑定——既然横竖要从源码编，编成原生不比编成 WASM 难，还快，还省掉整套 emscripten 工具链。
+
+（顺带记录：主项目 `vendor/libraw-wasm/` 下的 `libraw.wasm` 与 `libraw.min.js` 都是 0 字节的占位空文件，实际用的是 `LibRaw-Wasm-main/dist/`。）
+
+做法：LibRaw 源码作为 git submodule 固定到具体 tag，node-gyp 编译成 Node 原生插件，各平台预构建。版本号写进每个产出文件的头 `#Decoder:`，并用黄金文件（一组已知 RAW → 已知统计量）钉住——这比共享解码器更强，因为依赖被写明了、可核对。
+
+### 3.2 只 unpack，绝不 process
+
+需要的只有 **raw mosaic + EXIF**。调 `open_buffer()` + `unpack()` 拿 `rawdata.raw_image`，**永不调用 `dcraw_process()`**。去马赛克、白平衡、色彩变换全都不做——它们既是性能的大头，又会破坏我们要测的统计量。
+
+### 3.3 速度预算
+
+诚实地说，解码器不是速度的决定因素，这两件事才是：
+
+| 决定 | 影响 |
+|---|---|
+| 只 unpack 不 process | 数倍，且避免统计量被污染 |
+| 按文件并行（worker_threads） | 接近核数倍 |
+| 流式处理，不把整批解码结果留在内存 | 决定能不能跑完 |
+
+以 40 张 28.6 MB NEF 为例：I/O 合计 1.14 GB，原生 unpack 单张约 0.1–0.2 s，多线程后**整批是 I/O 受限的**。原生相对 WASM 的 2–4 倍优势只作用在解码这一段。
+
+真正的计算大头是入口 3 的整幅 FFT：24 MP 拆四通道各 6 MP，Welch 分段后每 ISO 每通道约 90 个 512² 段，20 个 ISO 合计约七千次 512² FFT——几秒量级，可接受。
+
+默认并行度取**逻辑核数的一半**，可在设置里调。这是别人的机器，不该跑满。
 
 ## 4. 阶段 0：共享地基
 
@@ -207,9 +233,16 @@ R_ClipFrac,G1_ClipFrac,G2_ClipFrac,B_ClipFrac
 
 不共享 UI、不共享构建、不共享依赖。ptc-compare 是你自己的分析页，ptc-collect 是发出去的采集端，混在一起会把你的机型库随应用一起发出去。
 
-## 9. 尚未决定
+## 9. 已定与未定
 
-- 中心裁切尺寸 512 指的是 mosaic 像素还是每通道像素（当前按 mosaic 写，即每通道 256×256）
+已定：
+
+- **中心裁切 512×512 指 mosaic 像素**，即每通道 256×256 = 65536 个样本
+- 入口 2 的墙面与入口 1 的平场装置有重叠，**不作特殊说明**，由使用者自行调节
+- 分发从 GitHub Releases 走。注意这与 ptc-compare 的处置不同：**ptc-compare 保持纯本地、不上 GitHub**；只有 ptc-collect 需要到别人手上。发布时机由你决定，我不会自行推送。
+
+未定：
+
 - 谱文件的具体二进制格式
-- Electron 的分发与签名（Windows 与 macOS 各自的要求）
-- 是否需要一个「一键自检」模式：对方拍三张就能确认整套流程和设置对不对，再去拍完整序列
+- macOS 签名与公证（不签名对方打不开；Windows 未签名会有 SmartScreen 警告但可绕过）
+- 是否需要一个「一键自检」模式：对方拍三张就能确认整套设置对不对，再去拍完整序列。我倾向于要——让一个不熟悉的人拍完六十张才发现长曝光降噪没关，那六十张全废。
