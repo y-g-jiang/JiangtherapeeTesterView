@@ -7,6 +7,7 @@
  * costs a round trip and the contributor's patience.
  */
 
+import { shutterText } from './shutterText.mjs';
 export const CHECK_LEVELS = { error: 'error', warning: 'warning' };
 
 /**
@@ -25,7 +26,6 @@ export const CHECK_LEVELS = { error: 'error', warning: 'warning' };
  */
 export const DARK_FAST_SHUTTER_SEC = 1 / 1000;
 
-const shutterText = (v) => (v >= 1 ? `${Number(v.toFixed(3))}s` : `1/${Math.round(1 / v)}s`);
 
 /**
  * @param {{name: string, meta: object}[]} frames  one entry per RAW, metadata already read

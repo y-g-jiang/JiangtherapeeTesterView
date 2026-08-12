@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
+import { shutterText } from '../analysis/shutterText.mjs';
 
 const fmt = (v, d = 4) =>
   v === null || v === undefined || !Number.isFinite(v) ? '—' : v.toFixed(d);
-const shutterText = (s) => (s >= 1 ? `${Number(s.toFixed(3))}s` : `1/${Math.round(1 / s)}s`);
 const pct = (v, d = 3) => (Number.isFinite(v) ? `${(v * 100).toFixed(d)}%` : '—');
 
 /**
@@ -199,7 +199,11 @@ export const EntryPanel = ({
               找到 {jobs.length} {entry === 'gain' ? '张可用' : '对，可以处理'}
               {scan.ladder && (
                 <span className="tagline">
-                  {scan.ladder === 'paired-shutter' ? '同快门配对' : '自动快门扫 ISO'}
+                  {scan.ladder === 'paired-shutter'
+                    ? '同快门配对'
+                    : scan.ladder === 'mixed'
+                      ? '两种拍法都有'
+                      : '自动快门扫 ISO'}
                 </span>
               )}
             </h3>

@@ -140,8 +140,25 @@ export const groupGainLadder = (frames, options = {}) => {
   }
   buckets.sort((a, b) => b.shutter - a.shutter);
 
+  /*
+   * What makes a measurement paired is that one shutter carries two ISOs, so
+   * the time cancels out of the ratio. Whether there are two such groups or
+   * twenty decides how far the chain reaches, not what kind of measurement it
+   * is -- a single group is a perfectly good link between two ISOs, and that
+   * is exactly what a supplementary shoot to patch one missing ISO looks like.
+   *
+   * Requiring two groups labelled such a shoot 'auto-shutter', which then told
+   * the analyst the number depends on a nominal shutter time that had in fact
+   * cancelled.
+   */
   const pairedGroups = buckets.filter((b) => new Set(b.frames.map((f) => f.meta.iso)).size >= 2);
-  const ladder = pairedGroups.length >= 2 ? 'paired-shutter' : 'auto-shutter';
+  const pairedFrames = new Set(pairedGroups.flatMap((b) => b.frames));
+  const ladder =
+    pairedGroups.length === 0
+      ? 'auto-shutter'
+      : pairedFrames.size === frames.length
+        ? 'paired-shutter'
+        : 'mixed';
 
   // Anything at the same ISO *and* the same shutter is a duplicate.
   for (const bucket of buckets) {
@@ -186,6 +203,15 @@ export const groupGainLadder = (frames, options = {}) => {
 
   const rejectedNames = new Set(rejected.map((r) => r.name));
   const usable = frames.filter((f) => !rejectedNames.has(f.name));
+
+  if (ladder === 'mixed' && usable.length > 0) {
+    problems.push({
+      level: 'info',
+      message:
+        `这组里两种拍法都有：${pairedGroups.length} 个快门下拍了不止一档 ISO（同快门配对，快门被约掉），` +
+        '其余是单张扫 ISO（吃快门标称值）。两条链都会记下来，分析时可以分别算、也可以对照着看。',
+    });
+  }
 
   if (ladder === 'auto-shutter' && usable.length > 0) {
     problems.push({

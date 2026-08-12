@@ -11,6 +11,7 @@
  */
 
 import { CLIP_SIGMA, CLIP_VARIANCE_FACTOR, clippedStats } from './darkPair.mjs';
+import { shutterText } from './shutterText.mjs';
 
 export const CHANNEL_POSITIONS = ['(0,0)', '(0,1)', '(1,0)', '(1,1)'];
 
@@ -189,7 +190,7 @@ export const groupPtcPairs = (frames, options = {}) => {
   for (const key of keys) {
     const [iso, shutter] = key.split('|').map(Number);
     const list = buckets.get(key).slice().sort(byName);
-    const label = `ISO ${iso} 快门 ${Number(shutter.toPrecision(4))}s`;
+    const label = `ISO ${iso} 快门 ${shutterText(shutter)}`;
 
     // An odd frame out is the one thing that cannot be paired. Everything
     // before it still can, so only the leftover is refused.

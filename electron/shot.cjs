@@ -59,6 +59,33 @@ const typeIntoNth = (labelText, index, value) => `
   })()
 `;
 
+const typeIntoLens = (value) => `
+  (() => {
+    const input = document.querySelector('.choice-input');
+    if (!input) return 'no lens input';
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, ${JSON.stringify(value)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return 'lens = ' + input.value;
+  })()
+`;
+
+/** The crop inputs live in the entry card, not the mode form. */
+const setCrop = (w, h) => `
+  (() => {
+    const inputs = [...document.querySelectorAll('.inline input[type=number]')];
+    if (inputs.length === 0) return 'no crop inputs';
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    const put = (el, v) => {
+      setter.call(el, String(v));
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    put(inputs[0], ${JSON.stringify(w)});
+    if (inputs[1]) put(inputs[1], ${JSON.stringify(h)});
+    return 'crop = ' + inputs.map(i => i.value).join('x');
+  })()
+`;
+
 const checkTheBox = `
   (() => {
     const box = document.querySelector('.check input[type=checkbox]');
@@ -124,9 +151,16 @@ module.exports = async function runShots(win, app) {
     const size = (process.env.JPTC_SHOT_SIZE || '6000x4000').split('x');
     await run(typeIntoNth('JPEG 输出像素', 0, size[0]));
     await run(typeIntoNth('JPEG 输出像素', 1, size[1]));
-    await run(typeInto('快门类型', '电子快门'));
-    await run(typeInto('压缩', '无损压缩'));
-    await run(clickByText('无镜头，机身盖', '.choice'));
+    await run(typeInto('快门类型', process.env.JPTC_SHOT_SHUTTER || '电子快门'));
+    await run(typeInto('压缩', process.env.JPTC_SHOT_COMPRESSION || '无损压缩'));
+    // The mode fields end up in the header and the filename, so a run that has
+    // to match an existing set needs them set to that set's strings.
+    if (process.env.JPTC_SHOT_LENS) {
+      await run(clickByText('装着镜头', '.choice'));
+      await run(typeIntoLens(process.env.JPTC_SHOT_LENS));
+    } else {
+      await run(clickByText('无镜头，机身盖', '.choice'));
+    }
     await run(checkTheBox);
     await shot('mode-complete');
 
@@ -142,6 +176,11 @@ module.exports = async function runShots(win, app) {
       await run(waitFor(`!!document.querySelector('table.mini') || !!document.querySelector('.panel--error')`));
       await run(`window.scrollTo(0, document.body.scrollHeight); 'scrolled'`);
       await shot(`${tab}-scanned`);
+
+      if (process.env.JPTC_SHOT_CROP) {
+        const [w, h] = process.env.JPTC_SHOT_CROP.split('x');
+        await run(setCrop(w, h));
+      }
 
       const canRun = await run(`!!([...document.querySelectorAll('button')].find(b => b.textContent.includes('开始处理')))`);
       if (!canRun) { log(`  (${tab}: nothing runnable, skipping)`); continue; }

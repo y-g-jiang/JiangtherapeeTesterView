@@ -1,3 +1,4 @@
+import { shutterText } from '../analysis/shutterText.mjs';
 import { EntryPanel, fmt, pct } from './EntryPanel.jsx';
 
 /** Shared crop control for the two whole-frame entries. */
@@ -117,7 +118,7 @@ const GainResults = ({ results }) => (
           r.channels.map((c, i) => (
             <tr key={`${ri}-${i}`}>
               <td className="num">{i === 0 ? r.iso : ''}</td>
-              <td>{i === 0 ? (r.shutter >= 1 ? `${r.shutter}s` : `1/${Math.round(1 / r.shutter)}s`) : ''}</td>
+              <td>{i === 0 ? shutterText(r.shutter) : ''}</td>
               <td>{['(0,0)', '(0,1)', '(1,0)', '(1,1)'][i]}</td>
               <td className="num">{fmt(c.measured.mean, 3)}</td>
               <td className="num">{fmt(c.measured.std, 3)}</td>
@@ -184,7 +185,7 @@ const PtcResults = ({ results }) => (
               {/* A set can span several ISOs, and one shutter can hold several
                   pairs, so a row is only identified by all three together. */}
               <td className="num">{i === 0 ? r.iso : ''}</td>
-              <td>{i === 0 ? (r.shutter >= 1 ? `${r.shutter}s` : `1/${Math.round(1 / r.shutter)}s`) : ''}</td>
+              <td>{i === 0 ? shutterText(r.shutter) : ''}</td>
               <td className="files">{i === 0 ? r.fileA : ''}</td>
               <td>{c.position}</td>
               <td className="num">{fmt(c.measured.meanA, 2)}</td>
