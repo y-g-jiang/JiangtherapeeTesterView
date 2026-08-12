@@ -262,7 +262,6 @@ const baseMeta = (first, mode, request) => ({
   lens: mode.lens,
   shutterType: mode.shutterType,
   compression: mode.compression,
-  bitDepth: mode.bitDepth,
   longExposureNr: mode.longExposureNr ? 'off (declared)' : 'NOT DECLARED OFF',
   ambientC: mode.ambientC,
   cfaPattern: first.cfaPattern,

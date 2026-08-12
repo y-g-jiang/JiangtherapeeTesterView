@@ -10,27 +10,16 @@ export const EMPTY_MODE = {
   firmware: '',
   shutterType: '',
   compression: '',
-  bitDepth: '',
   lens: '',
   longExposureNr: false,
   highIsoNr: '',
   ambientC: '',
 };
 
-const SHUTTER = [
-  ['mech', '机械快门', '快门帘走完全程。测 ISO 增益曲线时它的标称值不准，但黑场无所谓。'],
-  ['efcs', '电子前帘', '前帘电子、后帘机械。'],
-  ['elec', '电子快门', '全电子。曝光时间由时钟决定，最准。'],
-];
-
-const COMPRESSION = [
-  ['lossless', '无损压缩', '包含「无压缩」——两者对噪声统计没有区别。'],
-  ['uncompressed', '无压缩', '与无损压缩等价，分开填只是为了记录。'],
-  ['lossy', '有损压缩', '数据被压缩曲线改过，量化步长随信号变。仍可用，但必须如实填。'],
-];
-
 export const modeIsComplete = (mode) =>
-  Boolean(mode.shutterType && mode.compression && mode.bitDepth && mode.lens && mode.longExposureNr);
+  Boolean(
+    mode.shutterType.trim() && mode.compression.trim() && mode.lens.trim() && mode.longExposureNr,
+  );
 
 export const ModeForm = ({ mode, onChange, detected }) => {
   const set = (patch) => onChange({ ...mode, ...patch });
@@ -52,56 +41,38 @@ export const ModeForm = ({ mode, onChange, detected }) => {
         </p>
       )}
 
-      <div className="field">
-        <label>快门类型 <span className="req">必填</span></label>
-        <div className="choices">
-          {SHUTTER.map(([value, label, hint]) => (
-            <button
-              key={value}
-              className={mode.shutterType === value ? 'choice is-on' : 'choice'}
-              onClick={() => set({ shutterType: value })}
-              title={hint}
-            >
-              <span className="choice-label">{label}</span>
-              <span className="choice-hint">{hint}</span>
-            </button>
-          ))}
+      <div className="row">
+        <div className="field field--wide">
+          <label>
+            快门类型 <span className="req">必填</span>
+          </label>
+          <input
+            value={mode.shutterType}
+            placeholder="机械快门 / 电子前帘 / 电子快门"
+            onChange={(e) => set({ shutterType: e.target.value })}
+          />
+          <small>
+            照相机菜单里叫什么就写什么。测 ISO 增益曲线时机械快门的标称时间不准，黑场则无所谓。
+          </small>
         </div>
-      </div>
 
-      <div className="field">
-        <label>压缩 <span className="req">必填</span></label>
-        <div className="choices">
-          {COMPRESSION.map(([value, label, hint]) => (
-            <button
-              key={value}
-              className={mode.compression === value ? 'choice is-on' : 'choice'}
-              onClick={() => set({ compression: value })}
-              title={hint}
-            >
-              <span className="choice-label">{label}</span>
-              <span className="choice-hint">{hint}</span>
-            </button>
-          ))}
+        <div className="field field--wide">
+          <label>
+            压缩 <span className="req">必填</span>
+          </label>
+          <input
+            value={mode.compression}
+            placeholder="无损压缩 / 无压缩 / 有损压缩"
+            onChange={(e) => set({ compression: e.target.value })}
+          />
+          <small>
+            有损压缩会把数据过一条压缩曲线，量化步长随信号变化，仍可用但必须如实填。
+            无压缩与无损压缩对噪声统计没有区别。
+          </small>
         </div>
       </div>
 
       <div className="row">
-        <div className="field">
-          <label>位深 <span className="req">必填</span></label>
-          <div className="choices choices--tight">
-            {['12', '14', '16'].map((v) => (
-              <button
-                key={v}
-                className={mode.bitDepth === v ? 'choice is-on' : 'choice'}
-                onClick={() => set({ bitDepth: v })}
-              >
-                <span className="choice-label">{v} bit</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="field">
           <label>固件版本</label>
           <input

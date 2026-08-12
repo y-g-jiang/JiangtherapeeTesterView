@@ -32,6 +32,19 @@ const clickByText = (text, selector = 'button') => `
   })()
 `;
 
+const typeInto = (labelText, value) => `
+  (() => {
+    const field = [...document.querySelectorAll('.field')]
+      .find(f => f.querySelector('label') && f.querySelector('label').textContent.includes(${JSON.stringify(labelText)}));
+    const input = field && field.querySelector('input');
+    if (!input) return 'NO FIELD: ' + ${JSON.stringify(labelText)};
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, ${JSON.stringify(value)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return ${JSON.stringify(labelText)} + ' = ' + input.value;
+  })()
+`;
+
 const checkTheBox = `
   (() => {
     const box = document.querySelector('.check input[type=checkbox]');
@@ -80,9 +93,8 @@ module.exports = async function runShots(win, app) {
     await sleep(1500);
     await shot('gate');
 
-    await run(clickByText('电子快门', '.choice'));
-    await run(clickByText('无损压缩', '.choice'));
-    await run(clickByText('14 bit', '.choice'));
+    await run(typeInto('快门类型', '电子快门'));
+    await run(typeInto('压缩', '无损压缩'));
     await run(clickByText('无镜头，机身盖', '.choice'));
     await run(checkTheBox);
     await shot('mode-complete');

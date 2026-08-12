@@ -43,7 +43,6 @@ const headerLines = (meta) => {
     `#Lens: ${meta.lens ?? ''}`,
     `#ShutterType: ${meta.shutterType ?? ''}`,
     `#Compression: ${meta.compression ?? ''}`,
-    `#BitDepth: ${meta.bitDepth ?? ''}`,
     `#LongExposureNR: ${meta.longExposureNr ?? ''}`,
     `#AmbientC: ${meta.ambientC ?? ''}`,
     '#',

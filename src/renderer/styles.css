@@ -207,3 +207,6 @@ table.mini .derived { color: var(--secondary); background: rgba(11, 11, 11, 0.03
   border-radius: 999px;
   padding: 1px 8px;
 }
+
+.field--wide { min-width: 300px; }
+.field--wide input { width: 100%; }
