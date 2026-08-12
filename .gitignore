@@ -6,3 +6,5 @@ release/
 .vite/
 *.local
 .DS_Store
+out/
+native/prebuilt/

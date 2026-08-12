@@ -12,7 +12,7 @@ import { basename } from 'node:path';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const native = require('../native/build/Release/libraw_binding.node');
+const native = require(require('../src/nativePath.cjs').resolveNativePath());
 
 const CROP = 512;
 

@@ -95,7 +95,6 @@
         "NO_JPEG",
         "NO_LCMS",
         "NO_JASPER",
-        "USE_ZLIB=0",
         "_CRT_SECURE_NO_WARNINGS",
         "WIN32_LEAN_AND_MEAN"
       ],
@@ -103,21 +102,21 @@
         "-std=c++17",
         "-w"
       ],
-      "msvs_settings": {
-        "VCCLCompilerTool": {
-          "ExceptionHandling": 1,
-          "AdditionalOptions": [
-            "/std:c++17",
-            "/bigobj",
-            "/W0",
-            "/EHsc",
-            "/O2"
-          ]
-        }
-      },
       "msbuild_settings": {
         "ClCompile": {
-          "LanguageStandard": "stdcpp17"
+          "LanguageStandard": "stdcpp17",
+          "RuntimeLibrary": "MultiThreaded",
+          "ExceptionHandling": "Sync",
+          "WarningLevel": "TurnOffAllWarnings",
+          "AdditionalOptions": [
+            "/bigobj"
+          ]
+        },
+        "Link": {
+          "DelayLoadDLLs": [
+            "node.exe",
+            "%(DelayLoadDLLs)"
+          ]
         }
       }
     }

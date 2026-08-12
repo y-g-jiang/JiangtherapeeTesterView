@@ -10,7 +10,7 @@ import { analyseDarkPair } from '../src/analysis/darkPair.mjs';
 import { writeDarkScalarCsv, writeDarkSpectrumCsv } from '../src/output/darkCsv.mjs';
 
 const require = createRequire(import.meta.url);
-const native = require('../native/build/Release/libraw_binding.node');
+const native = require(require('../src/nativePath.cjs').resolveNativePath());
 
 const args = process.argv.slice(2);
 const noSpectra = args.includes('--no-spectra');
