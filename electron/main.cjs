@@ -7,7 +7,7 @@
  * compute modules, which stay ESM, are pulled in with dynamic import().
  */
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
-const { join, resolve, basename, extname } = require('node:path');
+const { join, resolve, basename, extname, dirname } = require('node:path');
 const {
   readdirSync, readFileSync, writeFileSync, mkdirSync, statSync, appendFileSync,
 } = require('node:fs');
@@ -171,23 +171,60 @@ const scanFrame = (path, readExifShutter) => {
   }
 };
 
-ipcMain.handle('pick-folder', async () => {
-  // Test seam: a native dialog cannot be driven from a script, so an
-  // environment variable stands in for the user's choice when one is set.
-  if (process.env.JPTC_PICK_DIR) return process.env.JPTC_PICK_DIR;
+/**
+ * Files, not a folder.
+ *
+ * One shooting session usually leaves all three entries' frames in the same
+ * card dump, and a folder picker forces them apart into three folders before
+ * anything can be read. Picking files lets one folder serve all three, and
+ * lets a mis-shot frame be left out without moving it.
+ */
+ipcMain.handle('pick-files', async () => {
+  // Test seam: a native dialog cannot be driven from a script, so the choice
+  // can be supplied as an explicit list, or as a folder to take whole.
+  if (process.env.JPTC_PICK_FILES) return JSON.parse(process.env.JPTC_PICK_FILES);
+  if (process.env.JPTC_PICK_DIR) return listRawFiles(process.env.JPTC_PICK_DIR);
+
+  const extensions = [...RAW_EXTENSIONS].map((e) => e.slice(1)).sort();
   const res = await dialog.showOpenDialog(win, {
-    properties: ['openDirectory'],
-    title: '选择放着 RAW 的文件夹',
+    properties: ['openFile', 'multiSelections', 'dontAddToRecent'],
+    title: '选择这一组的 RAW 文件（可多选）',
+    filters: [
+      { name: 'RAW', extensions },
+      { name: '所有文件', extensions: ['*'] },
+    ],
   });
-  return res.canceled ? null : res.filePaths[0];
+  return res.canceled ? null : res.filePaths;
 });
 
-ipcMain.handle('scan-folder', async (_event, dir, entry = 'dark') => {
+ipcMain.handle('scan-files', async (_event, chosen, entry = 'dark') => {
   const { groupDarkPairs, groupGainLadder, groupPtcPairs, readExifShutter } = await loadEsm();
-  const paths = listRawFiles(dir);
+
+  // A folder that slipped in (dragged, or an old saved list) is expanded
+  // rather than refused.
+  const paths = [];
+  const notRaw = [];
+  for (const path of chosen ?? []) {
+    let isDirectory = false;
+    try {
+      isDirectory = statSync(path).isDirectory();
+    } catch {
+      /* a vanished path is reported as unreadable by the scan below */
+    }
+    if (isDirectory) paths.push(...listRawFiles(path));
+    else if (RAW_EXTENSIONS.has(extname(path).toLowerCase())) paths.push(path);
+    else notRaw.push(basename(path));
+  }
+  paths.sort();
+
+  const dir = paths.length > 0 ? dirname(paths[0]) : null;
+  const spread = new Set(paths.map((p) => dirname(p))).size > 1;
+
   if (paths.length === 0) {
     return { dir, frames: [], pairs: [], rejected: [], problems: [], failures: [],
-      error: '这个文件夹里没有找到 RAW 文件。' };
+      error: notRaw.length > 0
+        ? `选中的 ${notRaw.length} 个文件都不是 RAW：${notRaw.slice(0, 4).join('、')}`
+        : '没有选到 RAW 文件。' };
   }
 
   const frames = [];
@@ -207,7 +244,21 @@ ipcMain.handle('scan-folder', async (_event, dir, entry = 'dark') => {
     entry === 'gain' ? groupGainLadder(frames)
     : entry === 'ptc' ? groupPtcPairs(frames)
     : groupDarkPairs(frames);
-  return { dir, entry, frames, failures, ...grouped };
+
+  const problems = [...(grouped.problems ?? [])];
+  if (notRaw.length > 0) {
+    problems.unshift({
+      level: 'warn',
+      message: `跳过了 ${notRaw.length} 个不是 RAW 的文件：${notRaw.slice(0, 4).join('、')}${
+        notRaw.length > 4 ? ' 等' : ''
+      }`,
+    });
+  }
+  if (spread) {
+    problems.unshift({ level: 'warn', message: '选中的文件来自多个文件夹，请确认它们属于同一组拍摄。' });
+  }
+
+  return { dir, entry, frames, failures, selectedCount: paths.length, ...grouped, problems };
 });
 
 // --------------------------------------------------------------------------

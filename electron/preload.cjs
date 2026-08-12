@@ -5,8 +5,8 @@ const { contextBridge, ipcRenderer } = require('electron');
  * the decoder stays in the main process.
  */
 contextBridge.exposeInMainWorld('jptc', {
-  pickFolder: () => ipcRenderer.invoke('pick-folder'),
-  scanFolder: (dir, entry) => ipcRenderer.invoke('scan-folder', dir, entry),
+  pickFiles: () => ipcRenderer.invoke('pick-files'),
+  scanFiles: (paths, entry) => ipcRenderer.invoke('scan-files', paths, entry),
   runEntry: (request) => ipcRenderer.invoke('run-entry', request),
   saveResults: (payload) => ipcRenderer.invoke('save-results', payload),
   reveal: (path) => ipcRenderer.invoke('reveal', path),

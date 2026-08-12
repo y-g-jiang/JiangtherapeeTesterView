@@ -13,7 +13,7 @@ const pct = (v, d = 3) => (Number.isFinite(v) ? `${(v * 100).toFixed(d)}%` : '�
  * the results table has, so those are the two things passed in.
  */
 export const EntryPanel = ({ entry, mode, disabled, title, blurb, cropControl, buildJobs, Results }) => {
-  const [dir, setDir] = useState(null);
+  const [picked, setPicked] = useState(null);
   const [scan, setScan] = useState(null);
   const [scanning, setScanning] = useState(null);
   const [running, setRunning] = useState(null);
@@ -34,12 +34,12 @@ export const EntryPanel = ({ entry, mode, disabled, title, blurb, cropControl, b
 
   const pick = async () => {
     reset();
-    const chosen = await window.jptc.pickFolder();
-    if (!chosen) return;
-    setDir(chosen);
-    setScanning({ done: 0, total: 0, name: '' });
+    const chosen = await window.jptc.pickFiles();
+    if (!chosen || chosen.length === 0) return;
+    setPicked(chosen);
+    setScanning({ done: 0, total: chosen.length, name: '' });
     try {
-      setScan(await window.jptc.scanFolder(chosen, entry));
+      setScan(await window.jptc.scanFiles(chosen, entry));
     } catch (e) {
       setError(e?.message ?? String(e));
     } finally {
@@ -99,11 +99,12 @@ export const EntryPanel = ({ entry, mode, disabled, title, blurb, cropControl, b
 
       <div className="actions">
         <button className="primary" onClick={pick}>
-          选择文件夹…
+          选择 RAW 文件…
         </button>
-        {dir && (
-          <span className="path" title={dir}>
-            {dir}
+        {picked && (
+          <span className="path" title={picked.join('\n')}>
+            已选 {picked.length} 个文件
+            {scan?.dir ? ` · ${scan.dir}` : ''}
           </span>
         )}
       </div>

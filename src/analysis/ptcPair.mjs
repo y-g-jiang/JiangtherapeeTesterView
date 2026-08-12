@@ -157,7 +157,7 @@ export const groupPtcPairs = (frames, options = {}) => {
       level: 'error',
       message:
         `这组里有 ${isos.size} 个不同的 ISO（${[...isos].sort((a, b) => a - b).join('、')}）。` +
-        'PTC 是单一 ISO 下扫快门，请把不同 ISO 分到不同文件夹。',
+        'PTC 是单一 ISO 下扫快门，一次只选同一个 ISO 的文件。',
     });
   }
 
@@ -181,7 +181,7 @@ export const groupPtcPairs = (frames, options = {}) => {
         message:
           list.length < 2
             ? `快门 ${Number(shutter.toPrecision(4))}s 只有 ${list.length} 张。每个曝光级别需要恰好两张。`
-            : `快门 ${Number(shutter.toPrecision(4))}s 有 ${list.length} 张。多出来的请移出文件夹。`,
+            : `快门 ${Number(shutter.toPrecision(4))}s 有 ${list.length} 张。多出来的请从选择里去掉。`,
       });
       continue;
     }

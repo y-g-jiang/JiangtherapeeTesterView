@@ -78,7 +78,21 @@ module.exports = async function runShots(win, app) {
     const img = await win.webContents.capturePage();
     const path = join(dir, `${String(++n).padStart(2, '0')}-${name}.png`);
     writeFileSync(path, img.toPNG());
-    log('SHOT', path);
+    /*
+     * capturePage goes through the compositor, which Windows stops driving
+     * when the display sleeps -- the run is fine and the PNG is zero bytes.
+     * The text of the panel comes from the DOM and does not care, so it is
+     * recorded alongside and is what a check should read.
+     */
+    log('SHOT', path, img.isEmpty() ? '(EMPTY -- compositor asleep)' : `${img.getSize().width}x${img.getSize().height}`);
+    const text = await win.webContents.executeJavaScript(`
+      (() => {
+        const card = [...document.querySelectorAll('.card')]
+          .find(c => c.querySelector('h2') && c.querySelector('h2').textContent.includes('入口'));
+        return card ? card.innerText.replace(/\\n{2,}/g, '\\n').slice(0, 900) : '(no entry card)';
+      })()
+    `);
+    log('TEXT ----\n' + text + '\n----');
   };
 
   const run = async (js) => {
@@ -107,7 +121,7 @@ module.exports = async function runShots(win, app) {
 
       await run(clickByText(label, '.tab'));
       await sleep(300);
-      await run(clickByText('选择文件夹…'));
+      await run(clickByText('选择 RAW 文件…'));
       await run(waitFor(`!!document.querySelector('table.mini') || !!document.querySelector('.panel--error')`));
       await run(`window.scrollTo(0, document.body.scrollHeight); 'scrolled'`);
       await shot(`${tab}-scanned`);
