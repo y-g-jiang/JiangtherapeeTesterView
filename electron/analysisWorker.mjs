@@ -36,6 +36,7 @@ const handlers = {
         }),
         fileA: job.nameA,
         fileB: job.nameB,
+        exifShutter: job.exifShutter ?? null,
       };
     } finally {
       a.close();
@@ -49,6 +50,7 @@ const handlers = {
       return {
         ...analyseGainFrame(a, { cropW: job.cropW, cropH: job.cropH }),
         file: job.name,
+        exifShutter: job.exifShutter ?? null,
         shutterGroup: job.shutterGroup,
       };
     } finally {
@@ -64,6 +66,7 @@ const handlers = {
         ...analysePtcPair(a, b, { cropSize: job.cropSize }),
         fileA: job.nameA,
         fileB: job.nameB,
+        exifShutter: job.exifShutter ?? null,
       };
     } finally {
       a.close();

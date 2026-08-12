@@ -84,6 +84,7 @@ export const DarkEntry = (props) => (
         pathB: p.b.path,
         nameA: p.a.name,
         nameB: p.b.name,
+        exifShutter: p.a.meta.exifShutter,
         warning: p.warnings.map((w) => w.message).join(' '),
         ...crop,
         spectra: true,
@@ -149,6 +150,7 @@ export const GainEntry = (props) => (
         shutter: f.meta.shutter,
         path: f.path,
         name: f.name,
+        exifShutter: f.meta.exifShutter,
         shutterGroup: f.meta.shutter.toPrecision(6),
         ...crop,
       }))
@@ -230,6 +232,7 @@ export const PtcEntry = (props) => (
         pathB: p.b.path,
         nameA: p.a.name,
         nameB: p.b.name,
+        exifShutter: p.a.meta.exifShutter,
         warning: p.warnings.map((w) => w.message).join(' '),
         ...crop,
       }))

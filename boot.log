@@ -1,0 +1,6 @@
+main start 33.4.11 shot= I:/ptc-collect/out/shots-exif
+native path I:\ptc-collect\native\prebuilt\libraw_binding.node
+native loaded 0.22.2-Release
+ready
+window created
+did-finish-load; starting driver

@@ -6,6 +6,7 @@
  * than read noise -- the arithmetic that turns one into the other belongs to
  * whoever is doing the analysis, and will outlive any particular version of it.
  */
+import { EXIF_SHUTTER_NOTE, exifShutterCells } from '../analysis/exifShutter.mjs';
 
 export const CHANNEL_NAMES = ['C00', 'C01', 'C10', 'C11'];
 
@@ -54,12 +55,14 @@ export const writeIsoGainCsv = (frames, meta) => {
     '# ShutterSec is the NOMINAL time from the file. A mechanical shutter',
     '# departs from it systematically and unreadably, which is what the',
     '# paired-shutter ladder exists to sidestep.',
+    ...EXIF_SHUTTER_NOTE,
     '#',
     '# g1/g2 = (t1/t2) * (Mean2 - BL2) / (Mean1 - BL1), with BL from the dark set.',
   );
   lines.push(
     [
-      'ISO', 'ShutterSec', 'Aperture', 'ShutterGroup', 'File', 'Channel',
+      'ISO', 'ShutterSec', 'ExposureTimeExif', 'ShutterApexExif',
+      'Aperture', 'ShutterGroup', 'File', 'Channel',
       'ColorIndex', 'N', 'Mean', 'Std', 'ClipFrac',
     ].join(','),
   );
@@ -70,6 +73,7 @@ export const writeIsoGainCsv = (frames, meta) => {
         [
           f.iso,
           f.shutter,
+          ...exifShutterCells(f.exifShutter),
           f.aperture,
           f.shutterGroup,
           f.file,
@@ -106,10 +110,15 @@ export const writePtcCsv = (pairs, meta) => {
     '# StdDiff is the standard deviation of A-B. Not halved, not corrected.',
     '# StdDiffClipped is the same after the sigma clip; the unclipped value is',
     '# kept beside it so the clip can be judged rather than trusted.',
+    '#',
+    ...EXIF_SHUTTER_NOTE,
+    '# The two frames of a pair are grouped on an identical ShutterSec, so the',
+    '# fractions below are the ones frame A holds.',
   );
   lines.push(
     [
-      'ISO', 'ShutterSec', 'Aperture', 'FileA', 'FileB', 'Channel', 'N',
+      'ISO', 'ShutterSec', 'ExposureTimeExif', 'ShutterApexExif',
+      'Aperture', 'FileA', 'FileB', 'Channel', 'N',
       'MeanA', 'MeanB', 'StdA', 'StdB', 'StdAMasked',
       'StdDiff', 'StdDiffClipped', 'DiffMean', 'Rejected', 'ClipFrac',
     ].join(','),
@@ -120,7 +129,8 @@ export const writePtcCsv = (pairs, meta) => {
       const m = c.measured;
       lines.push(
         [
-          p.iso, p.shutter, p.aperture, p.fileA, p.fileB, CHANNEL_NAMES[i], m.n,
+          p.iso, p.shutter, ...exifShutterCells(p.exifShutter),
+          p.aperture, p.fileA, p.fileB, CHANNEL_NAMES[i], m.n,
           scalar(m.meanA), scalar(m.meanB), scalar(m.stdA), scalar(m.stdB),
           scalar(m.stdAMasked), scalar(m.stdDiffRaw), scalar(m.stdDiffClipped),
           scalar(m.diffMean), m.rejected, scalar(m.clipFrac),

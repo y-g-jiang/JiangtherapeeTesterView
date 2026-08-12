@@ -6,6 +6,7 @@
  * apply corrections themselves, above all the quantisation step, which cannot
  * be recovered from any statistic once the pixels are gone.
  */
+import { EXIF_SHUTTER_NOTE, exifShutterCells } from '../analysis/exifShutter.mjs';
 
 export const CHANNEL_NAMES = ['C00', 'C01', 'C10', 'C11'];
 
@@ -69,10 +70,13 @@ const headerLines = (meta) => {
  */
 export const writeDarkScalarCsv = (entries, meta) => {
   const lines = headerLines({ ...meta, format: 'JPTC-DARK/1' });
+  lines.push('#', ...EXIF_SHUTTER_NOTE);
   lines.push(
     [
       'ISO',
       'ShutterSec',
+      'ExposureTimeExif',
+      'ShutterApexExif',
       'Channel',
       'ColorIndex',
       'N',
@@ -97,6 +101,7 @@ export const writeDarkScalarCsv = (entries, meta) => {
         [
           e.iso,
           e.shutter,
+          ...exifShutterCells(e.exifShutter),
           CHANNEL_NAMES[i],
           c.color,
           m.n,

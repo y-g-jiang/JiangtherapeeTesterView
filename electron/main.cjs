@@ -63,7 +63,8 @@ const RAW_EXTENSIONS = new Set([
 let esm = null;
 const loadEsm = async () => {
   if (esm) return esm;
-  const [poolMod, pairing, darkCsv, isoGain, ptcPair, entryCsv, zip] = await Promise.all([
+  const [poolMod, pairing, darkCsv, isoGain, ptcPair, entryCsv, zip, exifShutter] =
+    await Promise.all([
     import('./workerPool.mjs'),
     import('../src/analysis/pairing.mjs'),
     import('../src/output/darkCsv.mjs'),
@@ -71,8 +72,10 @@ const loadEsm = async () => {
     import('../src/analysis/ptcPair.mjs'),
     import('../src/output/entryCsv.mjs'),
     import('../src/output/zip.mjs'),
+    import('../src/analysis/exifShutter.mjs'),
   ]);
-  esm = { ...poolMod, ...pairing, ...darkCsv, ...isoGain, ...ptcPair, ...entryCsv, ...zip };
+  esm = { ...poolMod, ...pairing, ...darkCsv, ...isoGain, ...ptcPair, ...entryCsv, ...zip,
+          ...exifShutter };
   return esm;
 };
 
@@ -140,9 +143,10 @@ const listRawFiles = (dir) =>
  * black level -- which is what separates a real dark frame from a lens cap
  * that was not on.
  */
-const scanFrame = (path) => {
+const scanFrame = (path, readExifShutter) => {
+  const bytes = readFileSync(path);
   const file = new native.RawFile();
-  file.open(readFileSync(path));
+  file.open(bytes);
   try {
     const meta = file.metadata();
     const crop = file.centreCrop(512);
@@ -158,6 +162,9 @@ const scanFrame = (path) => {
       ...meta,
       centreAboveBlack: mean - black,
       centreClipFrac: clipped / crop.data.length,
+      // LibRaw resolves the shutter into one float and which field it came
+      // from depends on the camera, so the raw EXIF rationals ride along.
+      exifShutter: readExifShutter(bytes),
     };
   } finally {
     file.close();
@@ -176,7 +183,7 @@ ipcMain.handle('pick-folder', async () => {
 });
 
 ipcMain.handle('scan-folder', async (_event, dir, entry = 'dark') => {
-  const { groupDarkPairs, groupGainLadder, groupPtcPairs } = await loadEsm();
+  const { groupDarkPairs, groupGainLadder, groupPtcPairs, readExifShutter } = await loadEsm();
   const paths = listRawFiles(dir);
   if (paths.length === 0) {
     return { dir, frames: [], pairs: [], rejected: [], problems: [], failures: [],
@@ -189,7 +196,7 @@ ipcMain.handle('scan-folder', async (_event, dir, entry = 'dark') => {
     const name = basename(paths[i]);
     win?.webContents.send('scan-progress', { done: i, total: paths.length, name });
     try {
-      frames.push({ name, path: paths[i], meta: scanFrame(paths[i]) });
+      frames.push({ name, path: paths[i], meta: scanFrame(paths[i], readExifShutter) });
     } catch (error) {
       failures.push({ name, message: error?.message ?? String(error) });
     }
