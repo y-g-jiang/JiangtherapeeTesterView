@@ -13,7 +13,6 @@ export const EMPTY_MODE = {
   lens: '',
   longExposureNr: false,
   highIsoNr: '',
-  ambientC: '',
 };
 
 export const modeIsComplete = (mode) =>
@@ -72,26 +71,14 @@ export const ModeForm = ({ mode, onChange, detected }) => {
         </div>
       </div>
 
-      <div className="row">
-        <div className="field">
-          <label>固件版本</label>
-          <input
-            value={mode.firmware}
-            placeholder="例如 1.2"
-            onChange={(e) => set({ firmware: e.target.value })}
-          />
-          <small>同一台机身不同固件的读出可以完全不同。</small>
-        </div>
-
-        <div className="field">
-          <label>环境温度 ℃</label>
-          <input
-            value={mode.ambientC}
-            placeholder="可选"
-            onChange={(e) => set({ ambientC: e.target.value })}
-          />
-          <small>暗电流与温度强相关。</small>
-        </div>
+      <div className="field">
+        <label>固件版本</label>
+        <input
+          value={mode.firmware}
+          placeholder="例如 1.2"
+          onChange={(e) => set({ firmware: e.target.value })}
+        />
+        <small>同一台机身不同固件的读出可以完全不同。</small>
       </div>
 
       <div className="field">

@@ -28,7 +28,6 @@ const commonHeader = (meta, format) => [
   `#ShutterType: ${meta.shutterType ?? ''}`,
   `#Compression: ${meta.compression ?? ''}`,
   `#LongExposureNR: ${meta.longExposureNr ?? ''}`,
-  `#AmbientC: ${meta.ambientC ?? ''}`,
   '#',
   `#AdcStep: ${meta.adcStep}`,
   `#LinearisationCurve: ${meta.curveIsIdentity ? 'identity' : 'companded'}`,

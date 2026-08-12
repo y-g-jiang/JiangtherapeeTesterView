@@ -63,15 +63,16 @@ const RAW_EXTENSIONS = new Set([
 let esm = null;
 const loadEsm = async () => {
   if (esm) return esm;
-  const [poolMod, pairing, darkCsv, isoGain, ptcPair, entryCsv] = await Promise.all([
+  const [poolMod, pairing, darkCsv, isoGain, ptcPair, entryCsv, zip] = await Promise.all([
     import('./workerPool.mjs'),
     import('../src/analysis/pairing.mjs'),
     import('../src/output/darkCsv.mjs'),
     import('../src/analysis/isoGain.mjs'),
     import('../src/analysis/ptcPair.mjs'),
     import('../src/output/entryCsv.mjs'),
+    import('../src/output/zip.mjs'),
   ]);
-  esm = { ...poolMod, ...pairing, ...darkCsv, ...isoGain, ...ptcPair, ...entryCsv };
+  esm = { ...poolMod, ...pairing, ...darkCsv, ...isoGain, ...ptcPair, ...entryCsv, ...zip };
   return esm;
 };
 
@@ -263,7 +264,6 @@ const baseMeta = (first, mode, request) => ({
   shutterType: mode.shutterType,
   compression: mode.compression,
   longExposureNr: mode.longExposureNr ? 'off (declared)' : 'NOT DECLARED OFF',
-  ambientC: mode.ambientC,
   cfaPattern: first.cfaPattern,
   adcStep: first.quantisationStep,
   curveIsIdentity: first.curveIsIdentity,
@@ -277,7 +277,7 @@ const baseMeta = (first, mode, request) => ({
 ipcMain.handle('save-results', async (_event, { mode, outDir }) => {
   const esmMods = await loadEsm();
   const { buildFileStem, writeDarkScalarCsv, writeDarkSpectrumCsv,
-          writeIsoGainCsv, writePtcCsv } = esmMods;
+          writeIsoGainCsv, writePtcCsv, buildZip } = esmMods;
   if (!lastRun) throw new Error('还没有可保存的结果。');
   const ok = lastRun.results.filter((r) => !r.failed);
   if (ok.length === 0) throw new Error('没有成功的结果可以保存。');
@@ -299,11 +299,15 @@ ipcMain.handle('save-results', async (_event, { mode, outDir }) => {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const stem = buildFileStem(mode, first.camera, isoRange, lastRun.entry, date);
 
-  const files = [];
+  /*
+   * A run produces up to three CSVs and the contributor has to mail all of
+   * them. Shipping one archive removes the commonest handoff failure -- a set
+   * arriving with a file missing -- and CSV is numeric text, so it compresses
+   * to a fraction of its size on the way.
+   */
+  const entries = [];
   const put = (suffix, text) => {
-    const p = join(target, `${stem}_${suffix}.csv`);
-    writeFileSync(p, text);
-    files.push({ path: p, name: basename(p), size: statSync(p).size });
+    entries.push({ name: `${stem}_${suffix}.csv`, data: text });
   };
 
   const req = lastRun.request;
@@ -331,7 +335,16 @@ ipcMain.handle('save-results', async (_event, { mode, outDir }) => {
     put('ptc', writePtcCsv(ok, meta));
   }
 
-  return { dir: target, files };
+  const rawBytes = entries.reduce((sum, e) => sum + Buffer.byteLength(e.data, 'utf8'), 0);
+  const archivePath = join(target, `${stem}.zip`);
+  writeFileSync(archivePath, buildZip(entries));
+
+  return {
+    dir: target,
+    archive: { path: archivePath, name: basename(archivePath), size: statSync(archivePath).size },
+    contents: entries.map((e) => ({ name: e.name, size: Buffer.byteLength(e.data, 'utf8') })),
+    rawBytes,
+  };
 });
 
 ipcMain.handle('reveal', async (_event, path) => shell.showItemInFolder(path));

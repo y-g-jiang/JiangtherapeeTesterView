@@ -223,18 +223,29 @@ export const EntryPanel = ({ entry, mode, disabled, title, blurb, cropControl, b
 
       {saved && (
         <div className="panel panel--ok">
-          <h3>已保存到 {saved.dir}</h3>
-          <ul>
-            {saved.files.map((f) => (
-              <li key={f.path}>
-                <button className="link" onClick={() => window.jptc.reveal(f.path)}>
-                  {f.name}
-                </button>
-                <span className="size">{(f.size / 1024).toFixed(0)} KB</span>
+          <h3>已打包完成</h3>
+          <p className="archive">
+            <button className="link" onClick={() => window.jptc.reveal(saved.archive.path)}>
+              {saved.archive.name}
+            </button>
+            <span className="size">
+              {(saved.archive.size / 1024).toFixed(0)} KB
+              {saved.rawBytes > 0 && (
+                <> · 压缩自 {(saved.rawBytes / 1024).toFixed(0)} KB</>
+              )}
+            </span>
+          </p>
+          <p className="note">
+            <b>把这一个 zip 寄回即可。</b>里面是 {saved.contents.length} 个 CSV：
+          </p>
+          <ul className="contents">
+            {saved.contents.map((f) => (
+              <li key={f.name}>
+                {f.name} <span className="size">{(f.size / 1024).toFixed(0)} KB</span>
               </li>
             ))}
           </ul>
-          <p className="note">把这几个文件一起寄回即可。</p>
+          <p className="note">位置：{saved.dir}</p>
         </div>
       )}
     </section>
