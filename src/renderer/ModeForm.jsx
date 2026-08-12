@@ -11,7 +11,8 @@ export const EMPTY_MODE = {
   shutterType: '',
   compression: '',
   lens: '',
-  longExposureNr: false,
+  /** One declaration covering both switches the file cannot reveal. */
+  declaredOff: false,
   highIsoNr: '',
   imageWidth: '',
   imageHeight: '',
@@ -28,7 +29,7 @@ export const modeIsComplete = (mode) =>
     mode.shutterType.trim() &&
       mode.compression.trim() &&
       mode.lens.trim() &&
-      mode.longExposureNr &&
+      mode.declaredOff &&
       parseDimension(mode.imageWidth) &&
       parseDimension(mode.imageHeight),
   );
@@ -196,15 +197,20 @@ export const ModeForm = ({ mode, onChange, detected }) => {
         <label className="check">
           <input
             type="checkbox"
-            checked={mode.longExposureNr}
-            onChange={(e) => set({ longExposureNr: e.target.checked })}
+            checked={mode.declaredOff}
+            onChange={(e) => set({ declaredOff: e.target.checked })}
           />
           <span>
-            我已确认<b>长曝光降噪已关闭</b> <span className="req">必填</span>
+            我已确认<b>长曝光降噪已关闭</b>，<b>防抖也已关闭</b> <span className="req">必填</span>
           </span>
         </label>
         <small>
-          它只在部分帧上减暗电流，会破坏帧与帧之间的可比性。相机菜单里通常叫「长时间曝光降噪」或 Long Exposure NR。
+          长曝光降噪只在部分帧上减暗电流，会破坏帧与帧之间的可比性。相机菜单里通常叫「长时间曝光降噪」或
+          Long Exposure NR。
+          <br />
+          防抖（IBIS / OIS / Dual I.S.）要关，是因为它在曝光之间移动传感器：ISO 增益阶梯和 PTC 都建立在
+          「同一批像素看到同样的光」上，墙面只要不是绝对均匀，画面挪一点点电平就跟着变。上了三脚架还开着防抖，
+          有些机身反而会自己找抖动。黑场无所谓，但一起关掉最省事。
         </small>
       </div>
 

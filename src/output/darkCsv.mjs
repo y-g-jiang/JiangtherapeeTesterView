@@ -52,6 +52,7 @@ const headerLines = (meta) => {
     `#ShutterType: ${meta.shutterType ?? ''}`,
     `#Compression: ${meta.compression ?? ''}`,
     `#LongExposureNR: ${meta.longExposureNr ?? ''}`,
+    `#Stabilisation: ${meta.stabiliser ?? ''}`,
     '#',
     `#AdcStep: ${meta.adcStep}`,
     `#LinearisationCurve: ${meta.curveIsIdentity ? 'identity' : 'companded'}`,

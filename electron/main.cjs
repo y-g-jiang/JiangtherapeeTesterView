@@ -325,7 +325,10 @@ const baseMeta = (first, mode, request) => ({
   lens: mode.lens,
   shutterType: mode.shutterType,
   compression: mode.compression,
-  longExposureNr: mode.longExposureNr ? 'off (declared)' : 'NOT DECLARED OFF',
+  // Neither is readable from the file on every body, so both ride on the
+  // operator's single declaration and are written as declared, not measured.
+  longExposureNr: mode.declaredOff ? 'off (declared)' : 'NOT DECLARED OFF',
+  stabiliser: mode.declaredOff ? 'off (declared)' : 'NOT DECLARED OFF',
   cfaPattern: first.cfaPattern,
   adcStep: first.quantisationStep,
   curveIsIdentity: first.curveIsIdentity,

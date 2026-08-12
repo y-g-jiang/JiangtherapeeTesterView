@@ -30,7 +30,7 @@ describe('modeIsComplete', () => {
     shutterType: '机械快门',
     compression: '无损压缩',
     lens: 'none-bodycap',
-    longExposureNr: true,
+    declaredOff: true,
     imageWidth: '6000',
     imageHeight: '4000',
   };
@@ -50,6 +50,19 @@ describe('modeIsComplete', () => {
     expect(modeIsComplete({ ...filled, shutterType: '  ' })).toBe(false);
     expect(modeIsComplete({ ...filled, compression: '' })).toBe(false);
     expect(modeIsComplete({ ...filled, lens: '' })).toBe(false);
-    expect(modeIsComplete({ ...filled, longExposureNr: false })).toBe(false);
+    expect(modeIsComplete({ ...filled, declaredOff: false })).toBe(false);
+  });
+
+  it('has one declaration, covering both switches', () => {
+    /*
+     * Long-exposure NR and stabilisation are both settings no file reliably
+     * records, and both have to be off for the same run. One tick, one field:
+     * two checkboxes would let a set go out half-declared, and the CSV would
+     * have no way to say which half.
+     */
+    expect(Object.keys(EMPTY_MODE).filter((k) => k.toLowerCase().includes('nr'))).toEqual([
+      'highIsoNr',
+    ]);
+    expect('declaredOff' in EMPTY_MODE).toBe(true);
   });
 });
