@@ -63,12 +63,15 @@ const RAW_EXTENSIONS = new Set([
 let esm = null;
 const loadEsm = async () => {
   if (esm) return esm;
-  const [poolMod, pairing, darkCsv] = await Promise.all([
+  const [poolMod, pairing, darkCsv, isoGain, ptcPair, entryCsv] = await Promise.all([
     import('./workerPool.mjs'),
     import('../src/analysis/pairing.mjs'),
     import('../src/output/darkCsv.mjs'),
+    import('../src/analysis/isoGain.mjs'),
+    import('../src/analysis/ptcPair.mjs'),
+    import('../src/output/entryCsv.mjs'),
   ]);
-  esm = { ...poolMod, ...pairing, ...darkCsv };
+  esm = { ...poolMod, ...pairing, ...darkCsv, ...isoGain, ...ptcPair, ...entryCsv };
   return esm;
 };
 
@@ -143,10 +146,18 @@ const scanFrame = (path) => {
     const meta = file.metadata();
     const crop = file.centreCrop(512);
     let sum = 0;
-    for (let i = 0; i < crop.data.length; i++) sum += crop.data[i];
+    let clipped = 0;
+    for (let i = 0; i < crop.data.length; i++) {
+      sum += crop.data[i];
+      if (crop.data[i] >= meta.maximum) clipped++;
+    }
     const mean = sum / crop.data.length;
     const black = meta.black + (meta.cblack[0] ?? 0);
-    return { ...meta, darkMeanAboveBlack: mean - black };
+    return {
+      ...meta,
+      centreAboveBlack: mean - black,
+      centreClipFrac: clipped / crop.data.length,
+    };
   } finally {
     file.close();
   }
@@ -163,8 +174,8 @@ ipcMain.handle('pick-folder', async () => {
   return res.canceled ? null : res.filePaths[0];
 });
 
-ipcMain.handle('scan-folder', async (_event, dir) => {
-  const { groupDarkPairs } = await loadEsm();
+ipcMain.handle('scan-folder', async (_event, dir, entry = 'dark') => {
+  const { groupDarkPairs, groupGainLadder, groupPtcPairs } = await loadEsm();
   const paths = listRawFiles(dir);
   if (paths.length === 0) {
     return { dir, frames: [], pairs: [], rejected: [], problems: [], failures: [],
@@ -184,14 +195,18 @@ ipcMain.handle('scan-folder', async (_event, dir) => {
   }
   win?.webContents.send('scan-progress', { done: paths.length, total: paths.length, name: '' });
 
-  return { dir, frames, failures, ...groupDarkPairs(frames) };
+  const grouped =
+    entry === 'gain' ? groupGainLadder(frames)
+    : entry === 'ptc' ? groupPtcPairs(frames)
+    : groupDarkPairs(frames);
+  return { dir, entry, frames, failures, ...grouped };
 });
 
 // --------------------------------------------------------------------------
 // running
 // --------------------------------------------------------------------------
 
-ipcMain.handle('run-dark', async (_event, request) => {
+ipcMain.handle('run-entry', async (_event, request) => {
   const { AnalysisPool, defaultConcurrency } = await loadEsm();
   pool ??= new AnalysisPool({
     nativePath: NATIVE_PATH,
@@ -200,37 +215,32 @@ ipcMain.handle('run-dark', async (_event, request) => {
 
   const results = [];
   let done = 0;
+  const total = request.jobs.length;
 
   await Promise.all(
-    request.pairs.map(async (pair) => {
+    request.jobs.map(async (job) => {
       try {
-        results.push(
-          await pool.run({
-            pathA: pair.pathA,
-            pathB: pair.pathB,
-            nameA: pair.nameA,
-            nameB: pair.nameB,
-            cropW: request.cropW,
-            cropH: request.cropH,
-            window: request.window,
-            spectra: true,
-          }),
-        );
+        results.push(await pool.run({ ...job, kind: request.entry }));
       } catch (error) {
-        results.push({ iso: pair.iso, failed: error?.message ?? String(error) });
+        results.push({ ...job, failed: error?.message ?? String(error) });
       } finally {
         done++;
-        win?.webContents.send('run-progress', { done, total: request.pairs.length });
+        win?.webContents.send('run-progress', { done, total });
       }
     }),
   );
 
-  results.sort((a, b) => a.iso - b.iso);
-  lastRun = { results, request };
+  const order = request.entry === 'gain'
+    ? (a, b) => a.iso - b.iso || b.shutter - a.shutter
+    : request.entry === 'ptc'
+      ? (a, b) => b.shutter - a.shutter
+      : (a, b) => a.iso - b.iso;
+  results.sort(order);
+  lastRun = { entry: request.entry, results, request };
 
   // Spectra are megabytes; the window only needs the scalars.
   const light = results.map((r) =>
-    r.failed
+    r.failed || !r.channels
       ? r
       : {
           ...r,
@@ -240,11 +250,35 @@ ipcMain.handle('run-dark', async (_event, request) => {
           })),
         },
   );
-  return { results: light, concurrency: pool.size };
+  return { entry: request.entry, results: light, concurrency: pool.size };
+});
+
+const baseMeta = (first, mode, request) => ({
+  toolVersion: app.getVersion(),
+  librawVersion: first.librawVersion,
+  generated: new Date().toISOString(),
+  camera: first.camera,
+  firmware: mode.firmware,
+  lens: mode.lens,
+  shutterType: mode.shutterType,
+  compression: mode.compression,
+  bitDepth: mode.bitDepth,
+  longExposureNr: mode.longExposureNr ? 'off (declared)' : 'NOT DECLARED OFF',
+  ambientC: mode.ambientC,
+  cfaPattern: first.cfaPattern,
+  adcStep: first.quantisationStep,
+  curveIsIdentity: first.curveIsIdentity,
+  rawWidth: first.rawWidth,
+  rawHeight: first.rawHeight,
+  black: first.black,
+  maximum: first.maximum,
+  ...request,
 });
 
 ipcMain.handle('save-results', async (_event, { mode, outDir }) => {
-  const { buildFileStem, writeDarkScalarCsv, writeDarkSpectrumCsv } = await loadEsm();
+  const esmMods = await loadEsm();
+  const { buildFileStem, writeDarkScalarCsv, writeDarkSpectrumCsv,
+          writeIsoGainCsv, writePtcCsv } = esmMods;
   if (!lastRun) throw new Error('还没有可保存的结果。');
   const ok = lastRun.results.filter((r) => !r.failed);
   if (ok.length === 0) throw new Error('没有成功的结果可以保存。');
@@ -261,37 +295,10 @@ ipcMain.handle('save-results', async (_event, { mode, outDir }) => {
   mkdirSync(target, { recursive: true });
 
   const first = ok[0];
-  const isos = ok.map((r) => r.iso);
-  const isoRange =
-    isos.length > 1 ? `${Math.min(...isos)}-${Math.max(...isos)}` : String(isos[0]);
+  const isos = [...new Set(ok.map((r) => r.iso))].sort((a, b) => a - b);
+  const isoRange = isos.length > 1 ? `${isos[0]}-${isos[isos.length - 1]}` : String(isos[0]);
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const stem = buildFileStem(mode, first.camera, isoRange, 'dark', date);
-
-  const meta = {
-    toolVersion: app.getVersion(),
-    librawVersion: first.librawVersion,
-    generated: new Date().toISOString(),
-    camera: first.camera,
-    firmware: mode.firmware,
-    lens: mode.lens,
-    shutterType: mode.shutterType,
-    compression: mode.compression,
-    bitDepth: mode.bitDepth,
-    longExposureNr: mode.longExposureNr ? 'off (declared)' : 'NOT DECLARED OFF',
-    ambientC: mode.ambientC,
-    cfaPattern: first.cfaPattern,
-    adcStep: first.quantisationStep,
-    curveIsIdentity: first.curveIsIdentity,
-    rawWidth: first.rawWidth,
-    rawHeight: first.rawHeight,
-    cropW: lastRun.request.cropW,
-    cropH: lastRun.request.cropH,
-    planeW: first.channels[0].width,
-    planeH: first.channels[0].height,
-    clipSigma: first.clip.sigma,
-    clipVarianceFactor: first.clip.varianceFactor,
-    window: lastRun.request.window,
-  };
+  const stem = buildFileStem(mode, first.camera, isoRange, lastRun.entry, date);
 
   const files = [];
   const put = (suffix, text) => {
@@ -300,9 +307,30 @@ ipcMain.handle('save-results', async (_event, { mode, outDir }) => {
     files.push({ path: p, name: basename(p), size: statSync(p).size });
   };
 
-  put('scalars', writeDarkScalarCsv(ok, meta));
-  put('spectrum-h', writeDarkSpectrumCsv(ok, meta, 'h'));
-  put('spectrum-v', writeDarkSpectrumCsv(ok, meta, 'v'));
+  const req = lastRun.request;
+  if (lastRun.entry === 'dark') {
+    const meta = baseMeta(first, mode, {
+      cropW: req.cropW, cropH: req.cropH,
+      planeW: first.channels[0].width, planeH: first.channels[0].height,
+      clipSigma: first.clip.sigma, clipVarianceFactor: first.clip.varianceFactor,
+      window: req.window,
+    });
+    put('scalars', writeDarkScalarCsv(ok, meta));
+    put('spectrum-h', writeDarkSpectrumCsv(ok, meta, 'h'));
+    put('spectrum-v', writeDarkSpectrumCsv(ok, meta, 'v'));
+  } else if (lastRun.entry === 'gain') {
+    const meta = baseMeta(first, mode, {
+      ladder: req.ladder, cropW: req.cropW, cropH: req.cropH,
+      planeW: first.channels[0].width, planeH: first.channels[0].height,
+    });
+    put('levels', writeIsoGainCsv(ok, meta));
+  } else {
+    const meta = baseMeta(first, mode, {
+      iso: first.iso, cropSize: first.cropSize, planeSize: first.planeSize,
+      clipSigma: first.clip.sigma, clipVarianceFactor: first.clip.varianceFactor,
+    });
+    put('ptc', writePtcCsv(ok, meta));
+  }
 
   return { dir: target, files };
 });

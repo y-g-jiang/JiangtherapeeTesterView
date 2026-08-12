@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { DarkEntry } from './DarkEntry.jsx';
+import { DarkEntry, GainEntry, PtcEntry } from './entries.jsx';
 import { EMPTY_MODE, ModeForm, modeIsComplete } from './ModeForm.jsx';
 
 const ENTRIES = [
-  { key: 'dark', label: '3 · 黑场对', ready: true, hint: '先拍这个：另外两个入口都要用它给出的黑电平' },
-  { key: 'isogain', label: '2 · ISO 增益阶梯', ready: false, hint: '固定场景扫 ISO' },
-  { key: 'ptc', label: '1 · PTC 平场对', ready: false, hint: '单 ISO，多快门' },
+  { key: 'dark', label: '3 · 黑场对', hint: '先拍这个：另外两个入口都要用它给出的黑电平' },
+  { key: 'gain', label: '2 · ISO 增益阶梯', hint: '固定场景扫 ISO' },
+  { key: 'ptc', label: '1 · PTC 平场对', hint: '单 ISO，多快门' },
 ];
 
 export const App = () => {
@@ -38,18 +38,18 @@ export const App = () => {
           {ENTRIES.map((e) => (
             <button
               key={e.key}
-              className={`tab${tab === e.key ? ' is-on' : ''}${e.ready ? '' : ' is-todo'}`}
-              onClick={() => e.ready && setTab(e.key)}
-              disabled={!e.ready}
+              className={`tab${tab === e.key ? ' is-on' : ''}`}
+              onClick={() => setTab(e.key)}
               title={e.hint}
             >
               {e.label}
-              {!e.ready && <span className="soon">未实现</span>}
             </button>
           ))}
         </nav>
 
         {tab === 'dark' && <DarkEntry mode={mode} disabled={!complete} />}
+        {tab === 'gain' && <GainEntry mode={mode} disabled={!complete} />}
+        {tab === 'ptc' && <PtcEntry mode={mode} disabled={!complete} />}
       </main>
 
       <footer className="foot">

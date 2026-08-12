@@ -6,8 +6,8 @@ const { contextBridge, ipcRenderer } = require('electron');
  */
 contextBridge.exposeInMainWorld('jptc', {
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
-  scanFolder: (dir) => ipcRenderer.invoke('scan-folder', dir),
-  runDark: (request) => ipcRenderer.invoke('run-dark', request),
+  scanFolder: (dir, entry) => ipcRenderer.invoke('scan-folder', dir, entry),
+  runEntry: (request) => ipcRenderer.invoke('run-entry', request),
   saveResults: (payload) => ipcRenderer.invoke('save-results', payload),
   reveal: (path) => ipcRenderer.invoke('reveal', path),
   systemInfo: () => ipcRenderer.invoke('system-info'),

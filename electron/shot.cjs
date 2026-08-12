@@ -74,6 +74,8 @@ module.exports = async function runShots(win, app) {
     return out;
   };
 
+  const dirs = JSON.parse(process.env.JPTC_PICK_DIRS || '{}');
+
   try {
     await sleep(1500);
     await shot('gate');
@@ -85,21 +87,32 @@ module.exports = async function runShots(win, app) {
     await run(checkTheBox);
     await shot('mode-complete');
 
-    await run(clickByText('选择文件夹…'));
-    await run(waitFor(`!!document.querySelector('table.mini')`));
-    await shot('scanned');
+    for (const [tab, label] of [['dark', '3 · 黑场对'], ['gain', '2 · ISO 增益阶梯'], ['ptc', '1 · PTC 平场对']]) {
+      if (!dirs[tab]) continue;
+      log(`--- tab ${tab} -> ${dirs[tab]}`);
+      process.env.JPTC_PICK_DIR = dirs[tab];
+      process.env.JPTC_SAVE_DIR = join(dir, `saved-${tab}`);
 
-    await run(clickByText('开始处理'));
-    await run(
-      waitFor(`[...document.querySelectorAll('h3')].some(h => h.textContent.includes('结果'))`),
-    );
-    await run(`window.scrollTo(0, document.body.scrollHeight); 'scrolled'`);
-    await shot('results');
+      await run(clickByText(label, '.tab'));
+      await sleep(300);
+      await run(clickByText('选择文件夹…'));
+      await run(waitFor(`!!document.querySelector('table.mini') || !!document.querySelector('.panel--error')`));
+      await run(`window.scrollTo(0, document.body.scrollHeight); 'scrolled'`);
+      await shot(`${tab}-scanned`);
 
-    await run(clickByText('保存 CSV…'));
-    await run(waitFor(`!!document.querySelector('.panel--ok')`, 60000));
-    await run(`window.scrollTo(0, document.body.scrollHeight); 'scrolled'`);
-    await shot('saved');
+      const canRun = await run(`!!([...document.querySelectorAll('button')].find(b => b.textContent.includes('开始处理')))`);
+      if (!canRun) { log(`  (${tab}: nothing runnable, skipping)`); continue; }
+
+      await run(clickByText('开始处理'));
+      await run(waitFor(`[...document.querySelectorAll('h3')].some(h => h.textContent.includes('结果'))`));
+      await run(`window.scrollTo(0, document.body.scrollHeight); 'scrolled'`);
+      await shot(`${tab}-results`);
+
+      await run(clickByText('保存 CSV…'));
+      await run(waitFor(`!!document.querySelector('.panel--ok')`, 60000));
+      await run(`window.scrollTo(0, document.body.scrollHeight); 'scrolled'`);
+      await shot(`${tab}-saved`);
+    }
   } catch (error) {
     log('SHOT SEQUENCE FAILED:', error?.stack ?? error?.message ?? String(error));
   } finally {

@@ -85,7 +85,7 @@ export const groupDarkPairs = (frames, options = {}) => {
       // level. A light leak or a forgotten lens cap shows up here and nowhere
       // else until the numbers are already wrong.
       for (const f of [a, b]) {
-        const above = f.meta.darkMeanAboveBlack;
+        const above = f.meta.centreAboveBlack;
         if (above !== undefined && above > 8) {
           checks.push({
             level: CHECK_LEVELS.error,

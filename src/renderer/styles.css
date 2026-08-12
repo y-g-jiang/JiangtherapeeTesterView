@@ -197,3 +197,13 @@ table.mini .derived { color: var(--secondary); background: rgba(11, 11, 11, 0.03
   margin: 0 auto;
   width: 100%;
 }
+
+.tagline {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
