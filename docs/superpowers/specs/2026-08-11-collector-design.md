@@ -337,7 +337,25 @@ ISO,ShutterSec,ExposureTimeExif,ShutterApexExif,…
 
 多快门、两两配对的平场。取中心 512×512 mosaic（= 每通道 256×256，65536 个样本），差分，k=3.5 剪切与修正，逐通道记 `StdA` / `StdB` / `StdDiff`。
 
-产出即已定稿的 **JPTC/2** schema，直接进 ptc-compare。
+产出即 **JPTC/2**，直接进 ptc-compare。
+
+### 7.0 表的形状是契约，不是偏好
+
+ptc-compare 的 `parseCsv` 按**列名**找通道（`R_Mean` / `R_Std`），并且把缺 `#BlackLevel` 当硬错误。所以：
+
+- **宽表，一行一个曝光**，四个通道横着排。原来的长表（带 `Channel` 列）再整齐也读不进去。
+- **列名按颜色**（R/G1/G2/B），不按 CFA 单元格位置。位置是裁切给的，颜色才是文件要标的东西；GBRG 机身上两者不一致，按位置命名会把红色那列标成绿色。为此在 binding 里加了 `cfaColors = [COLOR(0,0), COLOR(0,1), COLOR(1,0), COLOR(1,1)]`，不再假设 RGGB。
+- 除 `X_Mean` / `X_Std` 外，**任何列名都不能以 `Mean` 或 `Std` 结尾**：读取端按 token 匹配、取第一个命中，`R_DiffMean` 会应答一次对均值的搜索。差分的偏置因此叫 `R_DiffOffset`。
+
+### 7.1 黑电平从黑场组来，跨会话留存
+
+`#BlackLevel` 是四个数（R,G1,G2,B），**逐 ISO** 一份，而 PTC 文件本来就是一 ISO 一个，正好对上。
+
+值来自入口 3 的实测（`BlackA`），不是厂商标称——标称是个整数，这台机器到 ISO 51200 已经偏了 8 DN。
+
+只放内存里不行：那意味着为了重存一次 PTC 表，要把 28 档 ISO 的黑场重跑一遍。所以按机身存进 `userData/black-levels.json`，新的黑场运行**合并**进去（覆盖同 ISO，保留未覆盖的 ISO）。入口 1 在扫描后就把「会用哪一组黑电平、哪些 ISO 还缺」写在面板上，而不是等到保存之后。
+
+缺的时候**不猜**：写一条 `#BlackLevelMissing`，并在界面上说清楚——补处理黑场组即可，平场不用重拍。猜一个数会照样解析成功，然后错得看不出来。
 
 ### 7.1 分桶：(ISO, 快门)，不是快门
 

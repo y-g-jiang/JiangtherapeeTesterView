@@ -163,6 +163,17 @@ Napi::Value RawFile::Metadata(const Napi::CallbackInfo& info) {
   out.Set("cfaPattern", Napi::String::New(env, std::string(d.idata.cdesc)));
   out.Set("filters", Napi::Number::New(env, d.idata.filters));
 
+  // The colour under each of the four cell positions, in the same order the
+  // crop is split: (0,0) (0,1) (1,0) (1,1). Which position is red depends on
+  // the body, so anything that names a channel by colour has to read this
+  // rather than assume RGGB.
+  Napi::Array cfaColors = Napi::Array::New(env, 4);
+  cfaColors.Set(0u, Napi::Number::New(env, processor_.COLOR(0, 0)));
+  cfaColors.Set(1u, Napi::Number::New(env, processor_.COLOR(0, 1)));
+  cfaColors.Set(2u, Napi::Number::New(env, processor_.COLOR(1, 0)));
+  cfaColors.Set(3u, Napi::Number::New(env, processor_.COLOR(1, 1)));
+  out.Set("cfaColors", cfaColors);
+
   out.Set("rawWidth", Napi::Number::New(env, d.sizes.raw_width));
   out.Set("rawHeight", Napi::Number::New(env, d.sizes.raw_height));
   out.Set("width", Napi::Number::New(env, d.sizes.width));

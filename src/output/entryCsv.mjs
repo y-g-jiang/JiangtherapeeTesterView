@@ -7,6 +7,7 @@
  * whoever is doing the analysis, and will outlive any particular version of it.
  */
 import { EXIF_SHUTTER_NOTE, exifShutterCells } from '../analysis/exifShutter.mjs';
+import { INTERCHANGE_COLORS, INTERCHANGE_NAMES } from '../analysis/blackLevels.mjs';
 
 export const CHANNEL_NAMES = ['C00', 'C01', 'C10', 'C11'];
 
@@ -98,7 +99,16 @@ export const writeIsoGainCsv = (frames, meta) => {
 };
 
 /**
- * Entry 1, in the JPTC/2 schema the analysis side already reads.
+ * Entry 1, in the JPTC/2 schema.
+ *
+ * One row per exposure, four channels across -- the layout ptc-compare's
+ * parser reads. It looks for R_Mean and R_Std by name, so a long table with a
+ * Channel column, however tidy, simply does not load there. Everything the
+ * long form carried is still here, one column group per statistic.
+ *
+ * Channels are named by COLOUR (R, G1, G2, B), not by cell position, because
+ * that is what the interchange format means by them and a GBRG body would
+ * otherwise have its red column labelled green.
  *
  * StdDiff is the standard deviation of A-B itself: not halved, not divided by
  * sqrt(2), not Sheppard-corrected. StdA and StdB sit beside it because the
@@ -107,6 +117,26 @@ export const writeIsoGainCsv = (frames, meta) => {
  */
 export const writePtcCsv = (pairs, meta) => {
   const lines = commonHeader(meta, 'JPTC/2');
+
+  /*
+   * The reader subtracts this to get signal, so the rows below stay raw. It is
+   * measured, per ISO, by the dark set -- which is the reason that set is shot
+   * first. Without it the table is not merely inconvenient, it is unreadable:
+   * ptc-compare treats a missing #BlackLevel as a hard error.
+   */
+  if (meta.blackLevel) {
+    lines.push(
+      `#BlackLevel: ${meta.blackLevel.join(',')}`,
+      `#BlackLevelSource: ${meta.blackLevelSource ?? 'dark set'}`,
+    );
+  } else {
+    lines.push(
+      '#BlackLevelMissing: no dark measurement for this ISO in this session.',
+      '#  The analysis side needs #BlackLevel and will refuse this file. Process',
+      '#  entry 3 for this ISO and save again.',
+    );
+  }
+
   lines.push(
     `#Pairing: Differential`,
     `#CropMosaic: ${meta.cropSize}x${meta.cropSize}`,
@@ -114,6 +144,8 @@ export const writePtcCsv = (pairs, meta) => {
     `#ISO: ${meta.iso}`,
     `#ClipSigma: ${meta.clipSigma}`,
     `#ClipVarianceFactor: ${meta.clipVarianceFactor}`,
+    '#ChannelOrder: R,G1,G2,B by colour. G1 shares its row with red.',
+    '# Levels are raw. No black level has been subtracted from any column.',
     '# StdDiff is the standard deviation of A-B. Not halved, not corrected.',
     '# StdDiffClipped is the same after the sigma clip; the unclipped value is',
     '# kept beside it so the clip can be judged rather than trusted.',
@@ -122,28 +154,49 @@ export const writePtcCsv = (pairs, meta) => {
     '# The two frames of a pair are grouped on an identical ShutterSec, so the',
     '# fractions below are the ones frame A holds.',
   );
-  lines.push(
-    [
-      'ISO', 'ShutterSec', 'ExposureTimeExif', 'ShutterApexExif',
-      'Aperture', 'FileA', 'FileB', 'Channel', 'N',
-      'MeanA', 'MeanB', 'StdA', 'StdB', 'StdAMasked',
-      'StdDiff', 'StdDiffClipped', 'DiffMean', 'Rejected', 'ClipFrac',
-    ].join(','),
-  );
+
+  /*
+   * Mean and Std lead, and every other statistic is named so that it cannot be
+   * mistaken for them: the reader matches on a token, and a column ending in
+   * "Mean" would answer to a search for the mean.
+   */
+  const groups = [
+    ['Mean', (m) => scalar(m.meanA)],
+    ['Std', (m) => scalar(m.stdA)],
+    ['MeanB', (m) => scalar(m.meanB)],
+    ['StdB', (m) => scalar(m.stdB)],
+    ['StdMasked', (m) => scalar(m.stdAMasked)],
+    ['StdDiff', (m) => scalar(m.stdDiffRaw)],
+    ['StdDiffClipped', (m) => scalar(m.stdDiffClipped)],
+    ['DiffOffset', (m) => scalar(m.diffMean)],
+    ['Rejected', (m) => m.rejected],
+    ['ClipFrac', (m) => scalar(m.clipFrac)],
+  ];
+
+  const header = [
+    'ISO', 'ShutterSec', 'ExposureTimeExif', 'ShutterApexExif',
+    'Aperture', 'Filename', 'FileB', 'N',
+  ];
+  for (const [suffix] of groups) {
+    for (const name of INTERCHANGE_NAMES) header.push(`${name}_${suffix}`);
+  }
+  lines.push(header.join(','));
 
   for (const p of pairs) {
-    p.channels.forEach((c, i) => {
-      const m = c.measured;
-      lines.push(
-        [
-          p.iso, p.shutter, ...exifShutterCells(p.exifShutter),
-          p.aperture, p.fileA, p.fileB, CHANNEL_NAMES[i], m.n,
-          scalar(m.meanA), scalar(m.meanB), scalar(m.stdA), scalar(m.stdB),
-          scalar(m.stdAMasked), scalar(m.stdDiffRaw), scalar(m.stdDiffClipped),
-          scalar(m.diffMean), m.rejected, scalar(m.clipFrac),
-        ].join(','),
-      );
-    });
+    // By colour, so the column labelled R is red on every CFA layout.
+    const byColour = INTERCHANGE_COLORS.map((color) =>
+      p.channels.find((c) => c.color === color),
+    );
+
+    const row = [
+      p.iso, p.shutter, ...exifShutterCells(p.exifShutter),
+      p.aperture, p.fileA, p.fileB, byColour[0]?.measured?.n ?? '',
+    ];
+    for (const [, read] of groups) {
+      for (const channel of byColour) row.push(channel ? read(channel.measured) : '');
+    }
+    lines.push(row.join(','));
   }
+
   return lines.join('\n') + '\n';
 };

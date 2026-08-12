@@ -87,6 +87,9 @@ export const analysePtcPair = (rawA, rawB, options = {}) => {
 
     channels.push({
       position: CHANNEL_POSITIONS[ch],
+      // Which colour sits at this cell position. Not assumed: a GBRG body puts
+      // red where an RGGB body puts a green.
+      color: metaA.cfaColors?.[ch] ?? ch,
       n,
       measured: {
         meanA: sa.mean,

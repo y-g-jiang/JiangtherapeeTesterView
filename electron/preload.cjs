@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('jptc', {
   scanFiles: (paths, entry) => ipcRenderer.invoke('scan-files', paths, entry),
   runEntry: (request) => ipcRenderer.invoke('run-entry', request),
   saveResults: (payload) => ipcRenderer.invoke('save-results', payload),
+  blackLevels: (camera) => ipcRenderer.invoke('black-levels', camera),
   reveal: (path) => ipcRenderer.invoke('reveal', path),
   systemInfo: () => ipcRenderer.invoke('system-info'),
 

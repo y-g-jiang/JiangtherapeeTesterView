@@ -17,7 +17,8 @@ const META = {
   iso: 100,
 };
 
-const channels = (measured) => [0, 1, 2, 3].map((color) => ({ color, measured }));
+/** Cell order (0,0) (0,1) (1,0) (1,1) on an RGGB body: R, G, G2, B. */
+const channels = (measured) => [0, 1, 3, 2].map((color) => ({ color, measured }));
 
 const rows = (csv) => {
   const lines = csv.trimEnd().split('\n').filter((l) => !l.startsWith('#'));
@@ -91,9 +92,9 @@ describe('the EXIF shutter columns line up with their headers', () => {
     );
     expect(cell(csv, 'ShutterSec')).toBe('0.004000000189989805');
     expect(cell(csv, 'ExposureTimeExif')).toBe('10/2500');
-    expect(cell(csv, 'FileA')).toBe('a.RW2');
-    expect(cell(csv, 'MeanA')).toBe('2000.1');
-    expect(cell(csv, 'StdDiffClipped')).toBe('63.5');
+    expect(cell(csv, 'Filename')).toBe('a.RW2');
+    expect(cell(csv, 'R_Mean')).toBe('2000.1');
+    expect(cell(csv, 'B_StdDiffClipped')).toBe('63.5');
   });
 
   it('leaves both cells empty when the camera wrote neither field', () => {
