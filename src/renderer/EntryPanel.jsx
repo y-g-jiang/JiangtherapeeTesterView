@@ -31,7 +31,6 @@ export const EntryPanel = ({
   const [saved, setSaved] = useState(null);
   const [error, setError] = useState(null);
   const [crop, setCrop] = useState(cropControl.initial);
-  const [black, setBlack] = useState(null);
 
   useEffect(() => window.jptc.onScanProgress(setScanning), []);
   useEffect(() => window.jptc.onRunProgress(setRunning), []);
@@ -55,12 +54,6 @@ export const EntryPanel = ({
       // The mode form sits above this panel and cannot read a file itself, so
       // what the scan learned about the body is handed back up to it.
       const meta = result?.frames?.[0]?.meta;
-      // What the PTC header will carry, said before the run rather than after
-      // the save -- a missing black level means re-shooting nothing, but it
-      // does mean processing the dark set, and that is worth knowing early.
-      if (meta && entry === 'ptc') {
-        setBlack(await window.jptc.blackLevels(`${meta.make} ${meta.model}`.trim()));
-      }
       if (meta && onDetected) {
         onDetected({
           camera: `${meta.make} ${meta.model}`.trim(),
@@ -199,31 +192,6 @@ export const EntryPanel = ({
         </div>
       )}
 
-      {entry === 'ptc' && jobs.length > 0 && (() => {
-        const needed = [...new Set(jobs.map((j) => j.iso))].sort((a, b) => a - b);
-        const have = new Set(black?.isos ?? []);
-        const missing = needed.filter((iso) => !have.has(iso));
-        return (
-          <div className={missing.length > 0 ? 'panel panel--warn' : 'panel'}>
-            <h3>黑电平</h3>
-            {black ? (
-              <p>
-                用 {black.measuredAt} 那组黑场实测的（{black.source}），逐 ISO 逐通道，写进 PTC 表的表头。
-              </p>
-            ) : (
-              <p>这台机器还没有处理过黑场组。</p>
-            )}
-            {missing.length > 0 && (
-              <p>
-                <b>ISO {missing.join('、')} 没有黑场数据。</b>
-                这些 ISO 的 PTC 表会缺 <code>#BlackLevel</code>，分析端读不了。
-                先去入口 3 处理这些 ISO 的黑场对，再回来保存即可——不用重拍平场。
-              </p>
-            )}
-          </div>
-        );
-      })()}
-
       {jobs.length > 0 && (
         <>
           <div className="panel">
@@ -306,12 +274,6 @@ export const EntryPanel = ({
               </li>
             ))}
           </ul>
-          {saved.missingBlack?.length > 0 && (
-            <p className="warn">
-              ISO {saved.missingBlack.join('、')} 的表缺 <code>#BlackLevel</code>，
-              分析端会拒收。处理完这些 ISO 的黑场组后重新保存即可。
-            </p>
-          )}
           <p className="note">位置：{saved.dir}</p>
         </div>
       )}

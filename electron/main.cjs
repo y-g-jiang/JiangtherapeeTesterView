@@ -63,7 +63,7 @@ const RAW_EXTENSIONS = new Set([
 let esm = null;
 const loadEsm = async () => {
   if (esm) return esm;
-  const [poolMod, pairing, darkCsv, isoGain, ptcPair, entryCsv, zip, exifShutter, blackLevels] =
+  const [poolMod, pairing, darkCsv, isoGain, ptcPair, entryCsv, zip, exifShutter] =
     await Promise.all([
     import('./workerPool.mjs'),
     import('../src/analysis/pairing.mjs'),
@@ -73,42 +73,15 @@ const loadEsm = async () => {
     import('../src/output/entryCsv.mjs'),
     import('../src/output/zip.mjs'),
     import('../src/analysis/exifShutter.mjs'),
-    import('../src/analysis/blackLevels.mjs'),
   ]);
   esm = { ...poolMod, ...pairing, ...darkCsv, ...isoGain, ...ptcPair, ...entryCsv, ...zip,
-          ...exifShutter, ...blackLevels };
+          ...exifShutter };
   return esm;
 };
 
 let pool = null;
 let win = null;
 let lastRun = null;
-
-/*
- * Measured black levels, kept between runs and between sessions.
- *
- * The dark set is shot first and its black levels are what a PTC table needs
- * in its header. Holding them only in memory would mean re-running a 28-ISO
- * dark set just to re-save a PTC table, so they live in a small file keyed by
- * body.
- */
-const blackStorePath = () => join(app.getPath('userData'), 'black-levels.json');
-
-const readBlackStore = () => {
-  try {
-    return JSON.parse(readFileSync(blackStorePath(), 'utf8'));
-  } catch {
-    return {};
-  }
-};
-
-const writeBlackStore = (store) => {
-  try {
-    writeFileSync(blackStorePath(), JSON.stringify(store, null, 2));
-  } catch (error) {
-    bootLog('black store write failed', error?.message ?? String(error));
-  }
-};
 
 const createWindow = () => {
   win = new BrowserWindow({
@@ -326,29 +299,6 @@ ipcMain.handle('run-entry', async (_event, request) => {
   results.sort(order);
   lastRun = { entry: request.entry, results, request };
 
-  /*
-   * A dark run is where black levels come from, so it publishes them the moment
-   * it finishes rather than at save time -- the operator may well process the
-   * dark set and the PTC set in either order within a session, and may come
-   * back to the PTC set another day.
-   */
-  if (request.entry === 'dark') {
-    const { blackLevelsByIso, mergeBlackLevels } = await loadEsm();
-    const usable = results.filter((r) => !r.failed);
-    const fresh = blackLevelsByIso(usable);
-    if (fresh.size > 0) {
-      const camera = usable[0].camera;
-      const store = readBlackStore();
-      store[camera] = mergeBlackLevels(store[camera], fresh, {
-        camera,
-        measuredAt: new Date().toISOString().slice(0, 10),
-        source: `${usable.length} 档 ISO 的黑场对`,
-      });
-      writeBlackStore(store);
-      bootLog('black levels stored', camera, [...fresh.keys()].join(','));
-    }
-  }
-
   // Spectra are megabytes; the window only needs the scalars.
   const light = results.map((r) =>
     r.failed || !r.channels
@@ -418,8 +368,6 @@ ipcMain.handle('save-results', async (_event, { mode, outDir }) => {
    * to a fraction of its size on the way.
    */
   const entries = [];
-  /** ISOs whose PTC table had to go out without a black level. */
-  const missingBlack = [];
   const put = (suffix, text) => {
     entries.push({ name: `${stem}_${suffix}.csv`, data: text });
   };
@@ -448,20 +396,11 @@ ipcMain.handle('save-results', async (_event, { mode, outDir }) => {
      * and whoever reads it would have to split them again to fit anything. The
      * shoot may cover several ISOs at once; the output stays one curve apiece.
      */
-    const { blackLevelFor } = esmMods;
-    const store = readBlackStore()[first.camera];
-
     for (const iso of isos) {
       const rows = ok.filter((r) => r.iso === iso);
-      const blackLevel = blackLevelFor(store, iso);
-      if (!blackLevel) missingBlack.push(iso);
       const meta = baseMeta(rows[0], mode, {
         iso, cropSize: rows[0].cropSize, planeSize: rows[0].planeSize,
         clipSigma: rows[0].clip.sigma, clipVarianceFactor: rows[0].clip.varianceFactor,
-        blackLevel,
-        blackLevelSource: blackLevel
-          ? `dark set measured ${store.measuredAt}, ${store.source}`
-          : null,
       });
       put(isos.length > 1 ? `ptc_iso${iso}` : 'ptc', writePtcCsv(rows, meta));
     }
@@ -476,19 +415,6 @@ ipcMain.handle('save-results', async (_event, { mode, outDir }) => {
     archive: { path: archivePath, name: basename(archivePath), size: statSync(archivePath).size },
     contents: entries.map((e) => ({ name: e.name, size: Buffer.byteLength(e.data, 'utf8') })),
     rawBytes,
-    missingBlack,
-  };
-});
-
-/** What the PTC table will put in its header, so the panel can say so first. */
-ipcMain.handle('black-levels', async (_event, camera) => {
-  const store = readBlackStore()[camera];
-  if (!store) return null;
-  return {
-    camera: store.camera,
-    measuredAt: store.measuredAt,
-    source: store.source,
-    isos: Object.keys(store.isos ?? {}).map(Number).sort((a, b) => a - b),
   };
 });
 

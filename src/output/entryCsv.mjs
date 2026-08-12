@@ -7,7 +7,7 @@
  * whoever is doing the analysis, and will outlive any particular version of it.
  */
 import { EXIF_SHUTTER_NOTE, exifShutterCells } from '../analysis/exifShutter.mjs';
-import { INTERCHANGE_COLORS, INTERCHANGE_NAMES } from '../analysis/blackLevels.mjs';
+import { INTERCHANGE_COLORS, INTERCHANGE_NAMES } from '../analysis/channelOrder.mjs';
 
 export const CHANNEL_NAMES = ['C00', 'C01', 'C10', 'C11'];
 
@@ -118,25 +118,6 @@ export const writeIsoGainCsv = (frames, meta) => {
 export const writePtcCsv = (pairs, meta) => {
   const lines = commonHeader(meta, 'JPTC/2');
 
-  /*
-   * The reader subtracts this to get signal, so the rows below stay raw. It is
-   * measured, per ISO, by the dark set -- which is the reason that set is shot
-   * first. Without it the table is not merely inconvenient, it is unreadable:
-   * ptc-compare treats a missing #BlackLevel as a hard error.
-   */
-  if (meta.blackLevel) {
-    lines.push(
-      `#BlackLevel: ${meta.blackLevel.join(',')}`,
-      `#BlackLevelSource: ${meta.blackLevelSource ?? 'dark set'}`,
-    );
-  } else {
-    lines.push(
-      '#BlackLevelMissing: no dark measurement for this ISO in this session.',
-      '#  The analysis side needs #BlackLevel and will refuse this file. Process',
-      '#  entry 3 for this ISO and save again.',
-    );
-  }
-
   lines.push(
     `#Pairing: Differential`,
     `#CropMosaic: ${meta.cropSize}x${meta.cropSize}`,
@@ -145,7 +126,11 @@ export const writePtcCsv = (pairs, meta) => {
     `#ClipSigma: ${meta.clipSigma}`,
     `#ClipVarianceFactor: ${meta.clipVarianceFactor}`,
     '#ChannelOrder: R,G1,G2,B by colour. G1 shares its row with red.',
-    '# Levels are raw. No black level has been subtracted from any column.',
+    '# Levels are raw. No black level has been subtracted, and none is quoted:',
+    '# the black level is a measurement of its own and lives in the dark set,',
+    '# which travels in the same submission. Joining the two is an analysis',
+    '# step, and doing it here would make one entry depend on another having',
+    '# been processed first -- a rule the person shooting should not have to know.',
     '# StdDiff is the standard deviation of A-B. Not halved, not corrected.',
     '# StdDiffClipped is the same after the sigma clip; the unclipped value is',
     '# kept beside it so the clip can be judged rather than trusted.',

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { writePtcCsv } from '../entryCsv.mjs';
-import { blackLevelFor, blackLevelsByIso, mergeBlackLevels } from '../../analysis/blackLevels.mjs';
 
 /**
  * The PTC table is the one file another program has to read, so its shape is a
- * contract rather than a preference. ptc-compare finds channels by column name
- * and refuses a file with no #BlackLevel at all.
+ * contract rather than a preference: ptc-compare finds channels by column name,
+ * so the layout is not ours to prefer. What it must NOT contain is anything
+ * this side had to compute.
  */
 
 const META = {
@@ -108,81 +108,15 @@ describe('writePtcCsv', () => {
     }
   });
 
-  it('writes the black level it was given, and says where it came from', () => {
-    const csv = writePtcCsv([pair(RGGB)], {
-      ...META,
-      blackLevel: [511.67, 511.54, 511.55, 511.69],
-      blackLevelSource: 'dark set measured 2026-08-12',
-    });
-    expect(csv).toContain('#BlackLevel: 511.67,511.54,511.55,511.69');
-    expect(csv).toContain('#BlackLevelSource: dark set measured 2026-08-12');
-    expect(csv).not.toContain('#BlackLevelMissing');
-  });
-
-  it('says so loudly when there is none, rather than inventing one', () => {
-    // A guessed black level would parse and be wrong by the amount guessed.
+  it('quotes no black level, and says where it lives instead', () => {
+    /*
+     * It is a measurement of the dark set, not of this one. Writing it here
+     * would mean the PTC entry could only be saved after the dark entry had
+     * been processed -- an ordering the person shooting should not have to
+     * know about, for a join the analysis side is going to do anyway.
+     */
     const csv = writePtcCsv([pair(RGGB)], META);
-    expect(csv).toContain('#BlackLevelMissing');
-    expect(csv).not.toMatch(/^#BlackLevel:/m);
-  });
-});
-
-describe('black levels from the dark set', () => {
-  const darkResult = (iso, base) => ({
-    iso,
-    channels: [0, 1, 3, 2].map((color, i) => ({
-      color,
-      measured: { blackA: base + i / 100 },
-    })),
-  });
-
-  it('collects them per ISO in interchange order', () => {
-    const map = blackLevelsByIso([darkResult(100, 511), darkResult(640, 510)]);
-    expect([...map.keys()]).toEqual([100, 640]);
-    expect(map.get(100)).toEqual([511, 511.01, 511.02, 511.03]);
-  });
-
-  it('reorders a body whose cells are not RGGB', () => {
-    const gbrg = {
-      iso: 100,
-      channels: [
-        { color: 1, measured: { blackA: 2 } },
-        { color: 2, measured: { blackA: 4 } },
-        { color: 0, measured: { blackA: 1 } },
-        { color: 3, measured: { blackA: 3 } },
-      ],
-    };
-    expect(blackLevelsByIso([gbrg]).get(100)).toEqual([1, 2, 3, 4]);
-  });
-
-  it('drops an ISO it cannot fill completely', () => {
-    // Three of four would still parse downstream, and be wrong in one channel.
-    const partial = { iso: 100, channels: [{ color: 0, measured: { blackA: 511 } }] };
-    expect(blackLevelsByIso([partial]).size).toBe(0);
-    expect(blackLevelsByIso([{ iso: 100, failed: 'boom' }]).size).toBe(0);
-  });
-
-  it('merges a new run without losing ISOs it did not cover', () => {
-    const first = mergeBlackLevels(null, blackLevelsByIso([darkResult(100, 511)]), {
-      camera: 'X', measuredAt: '2026-08-01',
-    });
-    const second = mergeBlackLevels(first, blackLevelsByIso([darkResult(640, 510)]), {
-      measuredAt: '2026-08-12',
-    });
-    expect(Object.keys(second.isos).sort()).toEqual(['100', '640']);
-    expect(second.camera).toBe('X');
-    expect(second.measuredAt).toBe('2026-08-12');
-  });
-
-  it('lets a re-measured ISO replace the older one', () => {
-    const first = mergeBlackLevels(null, blackLevelsByIso([darkResult(100, 511)]));
-    const second = mergeBlackLevels(first, blackLevelsByIso([darkResult(100, 509)]));
-    expect(blackLevelFor(second, 100)[0]).toBe(509);
-  });
-
-  it('returns null for an ISO that was never shot dark', () => {
-    const store = mergeBlackLevels(null, blackLevelsByIso([darkResult(100, 511)]));
-    expect(blackLevelFor(store, 6400)).toBeNull();
-    expect(blackLevelFor(null, 100)).toBeNull();
+    expect(csv).not.toMatch(/^#BlackLevel/m);
+    expect(csv).toContain('the black level is a measurement of its own and lives in the dark set');
   });
 });
