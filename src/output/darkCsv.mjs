@@ -91,6 +91,11 @@ export const writeDarkScalarCsv = (entries, meta) => {
       'StdDiffClipped',
       'DiffMean',
       'Rejected',
+      // The spectra's own reference variances. See the OneSided note above.
+      'WithinRowVarSingle',
+      'WithinColVarSingle',
+      'WithinRowVarDiff',
+      'WithinColVarDiff',
     ].join(','),
   );
 
@@ -116,6 +121,10 @@ export const writeDarkScalarCsv = (entries, meta) => {
           scalar(m.stdDiffClipped),
           scalar(m.diffMean),
           m.rejected,
+          scalar(m.withinRowVarSingle),
+          scalar(m.withinColVarSingle),
+          scalar(m.withinRowVarDiff),
+          scalar(m.withinColVarDiff),
         ].join(','),
       );
     });
@@ -155,9 +164,17 @@ export const writeDarkSpectrumCsv = (entries, meta, axis) => {
     `#TransformLength: ${n}`,
     `#Window: ${meta.window}`,
     '#Normalisation: |Y(k)|^2 / (N * sum(w^2)), averaged over lines',
-    '#Verification: with a rectangular window the one-sided sum equals the',
-    '#  within-line variance exactly. That identity holds for any data and is',
-    '#  the check that a normalisation slip cannot hide from.',
+    '#OneSided: bins 1..N/2-1 are NOT doubled. To integrate a column back to a',
+    '#  variance, double every bin except DC and, for even N, Nyquist. Adding a',
+    '#  column up as it stands lands exactly a factor of two low, and nothing in',
+    '#  a plot of it would look wrong.',
+    '#Verification: with a rectangular window that doubled sum equals the',
+    '#  within-line variance exactly -- an identity that holds for any data, and',
+    '#  the check a normalisation slip cannot hide from. Under the Hann window',
+    '#  used here it comes out a few percent short, because the lines are not',
+    '#  stationary. The reference itself is the WithinRowVar / WithinColVar',
+    '#  columns of the scalar table: NOT StdA^2, which is the whole plane and so',
+    '#  also carries the line-to-line spread a periodogram cannot see.',
     `#FreqUnit: cycles per channel-plane pixel (bin k -> k/${n}); x2 for sensor pixels`,
     '#DiffPowerFactor: 2   (the difference spectrum is NOT halved here)',
     `#LinesAveraged: ${axis === 'h' ? meta.planeH : meta.planeW}`,

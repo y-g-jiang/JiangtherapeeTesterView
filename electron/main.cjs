@@ -248,14 +248,14 @@ ipcMain.handle('scan-files', async (_event, chosen, entry = 'dark') => {
   const problems = [...(grouped.problems ?? [])];
   if (notRaw.length > 0) {
     problems.unshift({
-      level: 'warn',
+      level: 'warning',
       message: `跳过了 ${notRaw.length} 个不是 RAW 的文件：${notRaw.slice(0, 4).join('、')}${
         notRaw.length > 4 ? ' 等' : ''
       }`,
     });
   }
   if (spread) {
-    problems.unshift({ level: 'warn', message: '选中的文件来自多个文件夹，请确认它们属于同一组拍摄。' });
+    problems.unshift({ level: 'warning', message: '选中的文件来自多个文件夹，请确认它们属于同一组拍摄。' });
   }
 
   return { dir, entry, frames, failures, selectedCount: paths.length, ...grouped, problems };
@@ -292,7 +292,9 @@ ipcMain.handle('run-entry', async (_event, request) => {
   const order = request.entry === 'gain'
     ? (a, b) => a.iso - b.iso || b.shutter - a.shutter
     : request.entry === 'ptc'
-      ? (a, b) => b.shutter - a.shutter
+      // Brightest first within each ISO, and the ISOs in order, because a PTC
+      // set may now carry several of them.
+      ? (a, b) => a.iso - b.iso || b.shutter - a.shutter
       : (a, b) => a.iso - b.iso;
   results.sort(order);
   lastRun = { entry: request.entry, results, request };
@@ -386,11 +388,20 @@ ipcMain.handle('save-results', async (_event, { mode, outDir }) => {
     });
     put('levels', writeIsoGainCsv(ok, meta));
   } else {
-    const meta = baseMeta(first, mode, {
-      iso: first.iso, cropSize: first.cropSize, planeSize: first.planeSize,
-      clipSigma: first.clip.sigma, clipVarianceFactor: first.clip.varianceFactor,
-    });
-    put('ptc', writePtcCsv(ok, meta));
+    /*
+     * One file per ISO. A photon transfer curve is fitted at a single gain, so
+     * two ISOs in one table is not a longer curve, it is two curves overlaid --
+     * and whoever reads it would have to split them again to fit anything. The
+     * shoot may cover several ISOs at once; the output stays one curve apiece.
+     */
+    for (const iso of isos) {
+      const rows = ok.filter((r) => r.iso === iso);
+      const meta = baseMeta(rows[0], mode, {
+        iso, cropSize: rows[0].cropSize, planeSize: rows[0].planeSize,
+        clipSigma: rows[0].clip.sigma, clipVarianceFactor: rows[0].clip.varianceFactor,
+      });
+      put(isos.length > 1 ? `ptc_iso${iso}` : 'ptc', writePtcCsv(rows, meta));
+    }
   }
 
   const rawBytes = entries.reduce((sum, e) => sum + Buffer.byteLength(e.data, 'utf8'), 0);

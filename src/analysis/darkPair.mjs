@@ -206,6 +206,19 @@ export const analyseDarkPair = (rawA, rawB, options) => {
       const specSingle = rowColumnSpectra(fa, a.width, a.height, options);
       const specDiff = rowColumnSpectra(fd, a.width, a.height, options);
       entry.spectra = { single: specSingle, diff: specDiff };
+
+      /*
+       * These four are the spectra's own reference variances, and they are
+       * measurements: a row periodogram integrates to the variance WITHIN a
+       * row, and the plane variance in the columns beside them also carries
+       * the row-to-row spread, so the two are not the same number and cannot
+       * be recovered from each other. Without them nobody downstream can check
+       * the normalisation of the spectrum files at all.
+       */
+      entry.measured.withinRowVarSingle = specSingle.withinRowVar;
+      entry.measured.withinColVarSingle = specSingle.withinColVar;
+      entry.measured.withinRowVarDiff = specDiff.withinRowVar;
+      entry.measured.withinColVarDiff = specDiff.withinColVar;
       // Parseval: the summed one-sided power must match the variance the
       // spatial statistics already reported. A normalisation slip is otherwise
       // invisible.

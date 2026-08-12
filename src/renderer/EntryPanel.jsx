@@ -133,9 +133,13 @@ export const EntryPanel = ({ entry, mode, disabled, title, blurb, cropControl, b
       {scan?.problems?.length > 0 && (
         <div
           className={
+            // A note that the set spans several ISOs is not a warning, and
+            // painting it as one teaches people to ignore the panel.
             scan.problems.some((p) => p.level === 'error')
               ? 'panel panel--error'
-              : 'panel panel--warn'
+              : scan.problems.some((p) => p.level !== 'info')
+                ? 'panel panel--warn'
+                : 'panel'
           }
         >
           {scan.problems.map((p, i) => (

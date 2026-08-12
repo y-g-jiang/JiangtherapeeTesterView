@@ -133,9 +133,26 @@ export const analysePtcPair = (rawA, rawB, options = {}) => {
 };
 
 /**
- * A PTC set is one ISO and a ladder of shutter speeds, two frames each.
- * Grouping is by shutter rather than by ISO, which is the one structural
- * difference from the dark entry.
+ * Filename order, with runs of digits compared as numbers.
+ *
+ * Cameras number frames sequentially, so filename order is shooting order --
+ * and unlike the timestamp it survives a body whose clock is wrong. Plain
+ * string order would put P2642100 before P264299, which is exactly the case
+ * where a set rolls over and the pairing silently changes.
+ */
+const byName = (a, b) => a.name.localeCompare(b.name, 'en', { numeric: true, sensitivity: 'base' });
+
+/**
+ * A PTC set is a ladder of shutter speeds with two frames at each level.
+ *
+ * Two things are allowed that the dark entry does not allow, both because
+ * they save a shoot rather than because they are tidier:
+ *
+ *   - Several pairs at the SAME shutter. They are independent measurements of
+ *     the same exposure and all of them belong in the fit. Consecutive files
+ *     in filename order make a pair: 1+2, 3+4, and so on.
+ *   - Several ISOs at once. Each ISO is its own curve and gets its own file;
+ *     nothing is ever mixed across ISOs, since gain is what the curve measures.
  */
 export const groupPtcPairs = (frames, options = {}) => {
   const maxGap = options.maxPairGapSec ?? 900;
@@ -151,69 +168,113 @@ export const groupPtcPairs = (frames, options = {}) => {
     });
   }
 
-  const isos = new Set(frames.map((f) => f.meta.iso));
-  if (isos.size > 1) {
-    problems.push({
-      level: 'error',
-      message:
-        `这组里有 ${isos.size} 个不同的 ISO（${[...isos].sort((a, b) => a - b).join('、')}）。` +
-        'PTC 是单一 ISO 下扫快门，一次只选同一个 ISO 的文件。',
-    });
-  }
+  const isos = [...new Set(frames.map((f) => f.meta.iso))].sort((a, b) => a - b);
 
   const buckets = new Map();
   for (const f of frames) {
-    const key = f.meta.shutter.toPrecision(6);
+    const key = `${f.meta.iso}|${f.meta.shutter.toPrecision(6)}`;
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key).push(f);
   }
 
-  const keys = [...buckets.keys()].sort((a, b) => Number(b) - Number(a));
-  for (const key of keys) {
-    const list = buckets.get(key).slice().sort((x, y) => x.meta.timestamp - y.meta.timestamp);
-    const shutter = Number(key);
+  const keys = [...buckets.keys()].sort((x, y) => {
+    const [isoX, shutterX] = x.split('|').map(Number);
+    const [isoY, shutterY] = y.split('|').map(Number);
+    return isoX - isoY || shutterY - shutterX;
+  });
 
-    if (list.length !== 2) {
+  for (const key of keys) {
+    const [iso, shutter] = key.split('|').map(Number);
+    const list = buckets.get(key).slice().sort(byName);
+    const label = `ISO ${iso} 快门 ${Number(shutter.toPrecision(4))}s`;
+
+    // An odd frame out is the one thing that cannot be paired. Everything
+    // before it still can, so only the leftover is refused.
+    if (list.length % 2 === 1) {
+      const leftover = list.pop();
       rejected.push({
+        iso,
         shutter,
-        files: list.map((f) => f.name),
+        files: [leftover.name],
         level: 'error',
         message:
-          list.length < 2
-            ? `快门 ${Number(shutter.toPrecision(4))}s 只有 ${list.length} 张。每个曝光级别需要恰好两张。`
-            : `快门 ${Number(shutter.toPrecision(4))}s 有 ${list.length} 张。多出来的请从选择里去掉。`,
-      });
-      continue;
-    }
-
-    const [a, b] = list;
-    const checks = [];
-    if (a.meta.aperture !== b.meta.aperture) {
-      checks.push({ level: 'error', message: `光圈不一致：f/${a.meta.aperture} 对 f/${b.meta.aperture}。` });
-    }
-    const gap = Math.abs(a.meta.timestamp - b.meta.timestamp);
-    if (gap > maxGap) {
-      checks.push({
-        level: 'warning',
-        message: `两张相隔 ${Math.round(gap / 60)} 分钟，中间光线或温度可能变了。`,
+          list.length === 0
+            ? `${label} 只有 1 张。每个曝光级别需要成对。`
+            : `${label} 有奇数张，${leftover.name} 落了单。每个曝光级别需要成对。`,
       });
     }
 
-    if (checks.some((c) => c.level === 'error')) {
-      rejected.push({ shutter, files: [a.name, b.name], level: 'error', checks });
-    } else {
-      pairs.push({ shutter, a, b, warnings: checks });
+    for (let i = 0; i + 1 < list.length; i += 2) {
+      const a = list[i];
+      const b = list[i + 1];
+      const checks = [];
+      if (a.meta.aperture !== b.meta.aperture) {
+        checks.push({
+          level: 'error',
+          message: `光圈不一致：f/${a.meta.aperture} 对 f/${b.meta.aperture}。`,
+        });
+      }
+      const gap = Math.abs(a.meta.timestamp - b.meta.timestamp);
+      if (gap > maxGap) {
+        checks.push({
+          level: 'warning',
+          message: `两张相隔 ${Math.round(gap / 60)} 分钟，中间光线或温度可能变了。`,
+        });
+      }
+
+      if (checks.some((c) => c.level === 'error')) {
+        rejected.push({ iso, shutter, files: [a.name, b.name], level: 'error', checks });
+      } else {
+        pairs.push({ iso, shutter, a, b, warnings: checks });
+      }
     }
   }
 
-  if (pairs.length > 0 && pairs.length < 15) {
+  /*
+   * The fit needs exposure LEVELS, not pairs -- five pairs at one shutter is
+   * one point measured five times, which is a better point and not a longer
+   * curve. So the count that matters is the number of distinct shutters, and
+   * it has to be counted per ISO, since each ISO is fitted on its own.
+   */
+  const levelsByIso = new Map();
+  for (const pair of pairs) {
+    if (!levelsByIso.has(pair.iso)) levelsByIso.set(pair.iso, new Set());
+    levelsByIso.get(pair.iso).add(pair.shutter);
+  }
+
+  for (const [iso, levels] of [...levelsByIso].sort((a, b) => a[0] - b[0])) {
+    if (levels.size < 15) {
+      problems.push({
+        level: 'warning',
+        message:
+          `ISO ${iso} 只有 ${levels.size} 个曝光级别。三参数拟合在 15 级以下会很不稳，建议补到 25 级以上，` +
+          '并确保覆盖从接近全黑到刚刚过曝的整个范围。',
+      });
+    }
+  }
+
+  if (levelsByIso.size > 1) {
     problems.push({
-      level: 'warning',
+      level: 'info',
       message:
-        `只有 ${pairs.length} 个曝光级别。三参数拟合在 15 级以下会很不稳，建议补到 25 级以上，` +
-        '并确保覆盖从接近全黑到刚刚过曝的整个范围。',
+        `这批里有 ${levelsByIso.size} 个 ISO（${[...levelsByIso.keys()]
+          .sort((a, b) => a - b)
+          .join('、')}）。每个 ISO 是一条独立的曲线，会各自存成一个 CSV，不会混在一起。`,
     });
   }
 
-  return { pairs, rejected, problems };
+  const repeated = [...pairs.reduce((map, p) => {
+    const key = `${p.iso}|${p.shutter}`;
+    map.set(key, (map.get(key) ?? 0) + 1);
+    return map;
+  }, new Map()).values()].filter((count) => count > 1).length;
+
+  if (repeated > 0) {
+    problems.push({
+      level: 'info',
+      message: `有 ${repeated} 个曝光级别拍了不止一对，已按文件名顺序两两配对，全部进入拟合。`,
+    });
+  }
+
+  return { pairs, rejected, problems, isos };
 };

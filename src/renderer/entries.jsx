@@ -167,7 +167,7 @@ const PtcResults = ({ results }) => (
   <table className="mini">
     <thead>
       <tr>
-        <th>快门</th><th>通道</th><th>Mean A</th><th>std A</th><th>std D</th>
+        <th>ISO</th><th>快门</th><th>文件</th><th>通道</th><th>Mean A</th><th>std A</th><th>std D</th>
         <th>剪切后</th><th>过曝</th>
         <th className="derived">信号</th><th className="derived">时域噪声</th>
       </tr>
@@ -176,12 +176,16 @@ const PtcResults = ({ results }) => (
       {results.map((r, ri) =>
         r.failed ? (
           <tr key={ri}>
-            <td colSpan={9} className="error">{r.failed}</td>
+            <td colSpan={11} className="error">{r.failed}</td>
           </tr>
         ) : (
           r.channels.map((c, i) => (
             <tr key={`${ri}-${i}`}>
+              {/* A set can span several ISOs, and one shutter can hold several
+                  pairs, so a row is only identified by all three together. */}
+              <td className="num">{i === 0 ? r.iso : ''}</td>
               <td>{i === 0 ? (r.shutter >= 1 ? `${r.shutter}s` : `1/${Math.round(1 / r.shutter)}s`) : ''}</td>
+              <td className="files">{i === 0 ? r.fileA : ''}</td>
               <td>{c.position}</td>
               <td className="num">{fmt(c.measured.meanA, 2)}</td>
               <td className="num">{fmt(c.measured.stdA, 3)}</td>
@@ -204,10 +208,16 @@ export const PtcEntry = (props) => (
     entry="ptc"
     title="入口 1 · PTC 平场对"
     blurb={
-      <p>
-        单一 ISO，扫快门，从接近全黑到刚刚过曝，每级两张。取中心 512×512 马赛克。
-        产出的就是分析端直接能读的 JPTC/2。
-      </p>
+      <>
+        <p>
+          扫快门，从接近全黑到刚刚过曝，每级两张。取中心 512×512 马赛克。
+          产出的就是分析端直接能读的 JPTC/2。
+        </p>
+        <p className="hint">
+          同一个快门可以拍不止一对——按文件名顺序两两配对，全部进拟合。
+          也可以一次把多个 ISO 的大组一起丢进来：每个 ISO 各存一个 CSV，绝不混在一起。
+        </p>
+      </>
     }
     cropControl={{
       initial: { cropSize: 512 },
