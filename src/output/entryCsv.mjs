@@ -24,6 +24,13 @@ const commonHeader = (meta, format) => [
   '# to the dark set, which is why that one is shot first.',
   '#',
   `#Camera: ${meta.camera}`,
+  // The output size the camera writes as a JPEG, declared by the operator.
+  // Every normalisation downstream is per output pixel, so this is the scale
+  // the whole comparison hangs on -- and it is not the RAW's size, which
+  // carries masked borders the picture does not have.
+  `#ImageWidth: ${meta.imageWidth ?? ''}`,
+  `#ImageHeight: ${meta.imageHeight ?? ''}`,
+  `#ImagePixels: ${meta.imageWidth && meta.imageHeight ? meta.imageWidth * meta.imageHeight : ''}`,
   `#Firmware: ${meta.firmware ?? ''}`,
   `#Lens: ${meta.lens ?? ''}`,
   `#ShutterType: ${meta.shutterType ?? ''}`,

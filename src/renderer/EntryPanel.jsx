@@ -12,7 +12,17 @@ const pct = (v, d = 3) => (Number.isFinite(v) ? `${(v * 100).toFixed(d)}%` : 'â€
  * What differs between them is which jobs the scan produces and which columns
  * the results table has, so those are the two things passed in.
  */
-export const EntryPanel = ({ entry, mode, disabled, title, blurb, cropControl, buildJobs, Results }) => {
+export const EntryPanel = ({
+  entry,
+  mode,
+  disabled,
+  title,
+  blurb,
+  cropControl,
+  buildJobs,
+  Results,
+  onDetected,
+}) => {
   const [picked, setPicked] = useState(null);
   const [scan, setScan] = useState(null);
   const [scanning, setScanning] = useState(null);
@@ -39,7 +49,21 @@ export const EntryPanel = ({ entry, mode, disabled, title, blurb, cropControl, b
     setPicked(chosen);
     setScanning({ done: 0, total: chosen.length, name: '' });
     try {
-      setScan(await window.jptc.scanFiles(chosen, entry));
+      const result = await window.jptc.scanFiles(chosen, entry);
+      setScan(result);
+      // The mode form sits above this panel and cannot read a file itself, so
+      // what the scan learned about the body is handed back up to it.
+      const meta = result?.frames?.[0]?.meta;
+      if (meta && onDetected) {
+        onDetected({
+          camera: `${meta.make} ${meta.model}`.trim(),
+          width: meta.width,
+          height: meta.height,
+          rawWidth: meta.rawWidth,
+          rawHeight: meta.rawHeight,
+          adcStep: meta.quantisation?.step,
+        });
+      }
     } catch (e) {
       setError(e?.message ?? String(e));
     } finally {

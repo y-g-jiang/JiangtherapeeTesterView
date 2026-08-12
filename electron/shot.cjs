@@ -45,6 +45,20 @@ const typeInto = (labelText, value) => `
   })()
 `;
 
+/** For a field holding more than one input, such as width and height. */
+const typeIntoNth = (labelText, index, value) => `
+  (() => {
+    const field = [...document.querySelectorAll('.field')]
+      .find(f => f.querySelector('label') && f.querySelector('label').textContent.includes(${JSON.stringify(labelText)}));
+    const input = field && field.querySelectorAll('input')[${index}];
+    if (!input) return 'NO INPUT ' + ${index} + ' IN: ' + ${JSON.stringify(labelText)};
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, ${JSON.stringify(value)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return ${JSON.stringify(labelText)} + '[' + ${index} + '] = ' + input.value;
+  })()
+`;
+
 const checkTheBox = `
   (() => {
     const box = document.querySelector('.check input[type=checkbox]');
@@ -107,6 +121,9 @@ module.exports = async function runShots(win, app) {
     await sleep(1500);
     await shot('gate');
 
+    const size = (process.env.JPTC_SHOT_SIZE || '6000x4000').split('x');
+    await run(typeIntoNth('JPEG 输出像素', 0, size[0]));
+    await run(typeIntoNth('JPEG 输出像素', 1, size[1]));
     await run(typeInto('快门类型', '电子快门'));
     await run(typeInto('压缩', '无损压缩'));
     await run(clickByText('无镜头，机身盖', '.choice'));

@@ -320,6 +320,8 @@ const baseMeta = (first, mode, request) => ({
   generated: new Date().toISOString(),
   camera: first.camera,
   firmware: mode.firmware,
+  imageWidth: Number(mode.imageWidth),
+  imageHeight: Number(mode.imageHeight),
   lens: mode.lens,
   shutterType: mode.shutterType,
   compression: mode.compression,

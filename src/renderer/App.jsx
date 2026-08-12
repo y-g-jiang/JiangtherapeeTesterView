@@ -12,6 +12,7 @@ export const App = () => {
   const [mode, setMode] = useState(EMPTY_MODE);
   const [tab, setTab] = useState('dark');
   const [info, setInfo] = useState(null);
+  const [detected, setDetected] = useState(null);
 
   useEffect(() => {
     window.jptc.systemInfo().then(setInfo);
@@ -32,7 +33,7 @@ export const App = () => {
       </header>
 
       <main className="main">
-        <ModeForm mode={mode} onChange={setMode} detected={null} />
+        <ModeForm mode={mode} onChange={setMode} detected={detected} />
 
         <nav className="tabs">
           {ENTRIES.map((e) => (
@@ -47,9 +48,9 @@ export const App = () => {
           ))}
         </nav>
 
-        {tab === 'dark' && <DarkEntry mode={mode} disabled={!complete} />}
-        {tab === 'gain' && <GainEntry mode={mode} disabled={!complete} />}
-        {tab === 'ptc' && <PtcEntry mode={mode} disabled={!complete} />}
+        {tab === 'dark' && <DarkEntry mode={mode} disabled={!complete} onDetected={setDetected} />}
+        {tab === 'gain' && <GainEntry mode={mode} disabled={!complete} onDetected={setDetected} />}
+        {tab === 'ptc' && <PtcEntry mode={mode} disabled={!complete} onDetected={setDetected} />}
       </main>
 
       <footer className="foot">
