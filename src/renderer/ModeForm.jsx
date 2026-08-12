@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 /**
  * The shooting mode. Nothing downstream unlocks until this is complete.
  *
@@ -37,36 +35,6 @@ export const modeIsComplete = (mode) =>
 
 export const ModeForm = ({ mode, onChange, detected }) => {
   const set = (patch) => onChange({ ...mode, ...patch });
-  const [probed, setProbed] = useState(null);
-  const [probing, setProbing] = useState(false);
-
-  /*
-   * The three entries are locked until this form is complete, so by the time
-   * anyone could scan a folder they have already had to answer this. The form
-   * therefore has to be able to read one file on its own.
-   */
-  const readFromRaw = async () => {
-    setProbing(true);
-    try {
-      const chosen = await window.jptc.pickFiles();
-      if (!chosen || chosen.length === 0) return;
-      const scan = await window.jptc.scanFiles([chosen[0]], 'dark');
-      const meta = scan?.frames?.[0]?.meta;
-      if (meta) {
-        setProbed({
-          camera: `${meta.make} ${meta.model}`.trim(),
-          width: meta.width,
-          height: meta.height,
-          adcStep: meta.quantisation?.step,
-        });
-      }
-    } finally {
-      setProbing(false);
-    }
-  };
-
-  /** Whatever a scan has already learned outranks a one-off probe. */
-  const probe = detected ?? probed;
 
   const width = parseDimension(mode.imageWidth);
   const height = parseDimension(mode.imageHeight);
@@ -77,11 +45,18 @@ export const ModeForm = ({ mode, onChange, detected }) => {
    * so it is a remark and not a gate -- but an order-of-magnitude slip, or a
    * transposed pair of numbers, shows up here.
    */
+  /*
+   * An after-the-fact check, once a scan has happened -- never an offer. There
+   * is deliberately no way to fill this field from a RAW: the RAW's visible
+   * area is not the JPEG, and a button that fills it in would be taken every
+   * time, which is exactly the wrong number arriving with no one having looked.
+   */
   const mismatch =
     width &&
     height &&
-    probe?.width > 0 &&
-    (Math.abs(width / probe.width - 1) > 0.06 || Math.abs(height / probe.height - 1) > 0.06);
+    detected?.width > 0 &&
+    (Math.abs(width / detected.width - 1) > 0.06 ||
+      Math.abs(height / detected.height - 1) > 0.06);
 
   return (
     <section className="card">
@@ -92,11 +67,10 @@ export const ModeForm = ({ mode, onChange, detected }) => {
         </p>
       </header>
 
-      {probe && (
+      {detected && (
         <p className="detected">
-          从文件读到：<b>{probe.camera}</b>
-          {probe.width > 0 ? `，RAW 有效区 ${probe.width}×${probe.height}` : ''}
-          {probe.adcStep > 1 ? `，量化步长 ${probe.adcStep}` : ''}
+          从文件读到：<b>{detected.camera}</b>
+          {detected.adcStep > 1 ? `，量化步长 ${detected.adcStep}` : ''}
         </p>
       )}
 
@@ -131,29 +105,18 @@ export const ModeForm = ({ mode, onChange, detected }) => {
             onChange={(e) => set({ imageHeight: e.target.value })}
           />
           {megapixels !== null && <span className="dims-mp">= {megapixels} MP</span>}
-          {probe?.width > 0 ? (
-            <button
-              className="ghost"
-              onClick={() => set({ imageWidth: String(probe.width), imageHeight: String(probe.height) })}
-            >
-              用 RAW 的有效区 {probe.width}×{probe.height}
-            </button>
-          ) : (
-            <button className="ghost" onClick={readFromRaw} disabled={probing}>
-              {probing ? '读取中…' : '从一张 RAW 读取'}
-            </button>
-          )}
         </div>
         <small>
           <b>照同一台机器拍的 JPEG 的长和宽填</b>，不是传感器的总像素、也不是 RAW 的尺寸。
           所有对比都归一到 2160 高的输出，这个高度就是那把尺子；填错了曲线会整体差一个比例，
-          而且看不出任何异常。
+          而且看不出任何异常。软件<b>不会</b>替你从 RAW 里读——RAW 的有效区不是 JPEG，
+          机身裁切和小尺寸输出都会让它们不同，这个数只能你自己对着照片确认。
           {mismatch && (
             <>
               <br />
               <span className="warn">
-                RAW 的有效区是 {probe.width}×{probe.height}，与你填的差得较多。
-                机身裁切或多尺寸输出时这是正常的；否则请核对。
+                和刚读到的 RAW 有效区（{detected.width}×{detected.height}）差得较多。
+                机身裁切、小尺寸输出时这是正常的；否则请回去核对一遍你的 JPEG。
               </span>
             </>
           )}
