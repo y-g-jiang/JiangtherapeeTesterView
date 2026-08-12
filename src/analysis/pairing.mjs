@@ -10,6 +10,24 @@
 export const CHECK_LEVELS = { error: 'error', warning: 'warning' };
 
 /**
+ * A dark frame should be as short as the body can manage.
+ *
+ * Not mainly for dark current -- at these times that is a hundredth of an
+ * electron. It is the light leak. A body cap is not a lid and the mount is not
+ * a seal, and whatever gets past them accumulates in proportion to the
+ * exposure: 1/200 s is twenty times more of it than 1/4000 s. The leak is also
+ * the one contamination that looks like a perfectly ordinary noise floor,
+ * which is why it gets said loudly rather than caught later.
+ *
+ * Slower than this and the set gets a prominent note. It is never a refusal:
+ * a cap that really is opaque gives the same numbers at any speed, and asking
+ * for a reshoot on a suspicion would cost more than it is worth.
+ */
+export const DARK_FAST_SHUTTER_SEC = 1 / 1000;
+
+const shutterText = (v) => (v >= 1 ? `${Number(v.toFixed(3))}s` : `1/${Math.round(1 / v)}s`);
+
+/**
  * @param {{name: string, meta: object}[]} frames  one entry per RAW, metadata already read
  * @param {{ requireDark?: boolean, maxPairGapSec?: number }} [options]
  */
@@ -60,7 +78,7 @@ export const groupDarkPairs = (frames, options = {}) => {
     };
 
     same('model', '机身');
-    same('shutter', '快门', (v) => (v >= 1 ? `${v}s` : `1/${Math.round(1 / v)}s`));
+    same('shutter', '快门', shutterText);
     same('aperture', '光圈', (v) => `f/${v}`);
     same('rawWidth', 'RAW 宽度');
     same('rawHeight', 'RAW 高度');
@@ -100,6 +118,14 @@ export const groupDarkPairs = (frames, options = {}) => {
       }
     }
 
+    if (a.meta.shutter > DARK_FAST_SHUTTER_SEC) {
+      checks.push({
+        level: CHECK_LEVELS.warning,
+        message:
+          `快门 ${shutterText(a.meta.shutter)}，比建议的慢。黑场请用机身能到的最快快门。`,
+      });
+    }
+
     if (!a.meta.quantisation.linearisationCurve.isIdentity) {
       checks.push({
         level: CHECK_LEVELS.warning,
@@ -134,6 +160,21 @@ export const groupDarkPairs = (frames, options = {}) => {
         });
       }
     }
+  }
+
+  const slow = pairs.filter((p) => p.shutter > DARK_FAST_SHUTTER_SEC);
+  if (slow.length > 0) {
+    const slowest = slow.reduce((worst, p) => (p.shutter > worst.shutter ? p : worst), slow[0]);
+    problems.push({
+      level: CHECK_LEVELS.warning,
+      message:
+        `${slow.length === pairs.length ? '这组黑场全部' : `${slow.length}/${pairs.length} 对`}` +
+        `用了比 ${shutterText(DARK_FAST_SHUTTER_SEC)} 慢的快门，最慢 ${shutterText(slowest.shutter)}` +
+        `（ISO ${slowest.iso}）。黑场请用机身能达到的最快快门：机身盖不是密封件，` +
+        `漏进来的光按曝光时间累积，${shutterText(slowest.shutter)} 是 1/4000s 的 ` +
+        `${Math.round(slowest.shutter * 4000)} 倍。数据照常可用，不必重拍——` +
+        `但如果黑电平或读噪偏高，先怀疑这里。`,
+    });
   }
 
   const bodies = new Set(frames.map((f) => f.meta.model));
