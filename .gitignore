@@ -1,10 +1,10 @@
 node_modules/
 native/build/
+native/prebuilt/
 dist/
 out/
 release/
 .vite/
 *.local
 .DS_Store
-out/
-native/prebuilt/
+boot.log
