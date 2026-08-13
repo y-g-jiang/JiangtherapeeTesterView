@@ -136,6 +136,64 @@ export const analysePtcPair = (rawA, rawB, options = {}) => {
   };
 };
 
+
+/**
+ * Did this exposure ladder ever reach saturation?
+ *
+ * A photon transfer curve without a saturated frame has no top: full well is
+ * unmeasured, and the fit's saturation signal becomes whatever the brightest
+ * frame happened to be. The curve still looks perfectly healthy -- it is just
+ * shorter than the sensor -- so nothing downstream can tell.
+ *
+ * Two signatures, because they fail in opposite directions:
+ *
+ *   clipFrac  counts pixels at the vendor's stated maximum. Exact when that
+ *             number is right, silent when it is too high.
+ *   sigma     collapses towards zero once a channel is pinned at its ceiling.
+ *             It is a property of the pixels and needs no metadata, but it
+ *             only means something relative to the same channel's own peak.
+ *
+ * ONE CHANNEL IS ENOUGH. On a neutral field green saturates well before red
+ * and blue, and green saturating is the end of the usable range: the curve
+ * cannot go further without one of its channels being pinned.
+ */
+const CLIP_FRACTION = 0.001;
+const SIGMA_COLLAPSE = 0.5;
+
+const saturationOf = (frames) => {
+  const channels = frames[0]?.meta?.centreChannels?.length ?? 0;
+  if (channels === 0) return null;
+
+  let reached = false;
+  let bestFraction = 0;
+
+  for (let c = 0; c < channels; c++) {
+    const stats = frames
+      .map((f) => ({ frame: f, ...f.meta.centreChannels[c] }))
+      .filter((s) => Number.isFinite(s.mean) && Number.isFinite(s.sigma));
+    if (stats.length === 0) continue;
+
+    const peakSigma = Math.max(...stats.map((s) => s.sigma));
+    const atPeak = stats.find((s) => s.sigma === peakSigma);
+
+    for (const s of stats) {
+      const clipped = s.clipFrac > CLIP_FRACTION;
+      // Brighter than the noise peak but quieter than it: the only way that
+      // happens is the channel running out of range.
+      const collapsed =
+        atPeak !== undefined && s.mean > atPeak.mean && s.sigma < SIGMA_COLLAPSE * peakSigma;
+      if (clipped || collapsed) reached = true;
+    }
+
+    const maximum = frames[0].meta.maximum;
+    if (maximum > 0) {
+      bestFraction = Math.max(bestFraction, Math.max(...stats.map((s) => s.mean)) / maximum);
+    }
+  }
+
+  return { reached, bestFraction };
+};
+
 /**
  * Filename order, with runs of digits compared as numbers.
  *
@@ -255,6 +313,24 @@ export const groupPtcPairs = (frames, options = {}) => {
           '并确保覆盖从接近全黑到刚刚过曝的整个范围。',
       });
     }
+  }
+
+  // Per ISO: each curve is fitted on its own, so each one needs its own top.
+  const framesByIso = new Map();
+  for (const f of frames) {
+    framesByIso.set(f.meta.iso, [...(framesByIso.get(f.meta.iso) ?? []), f]);
+  }
+  for (const [iso, isoFrames] of [...framesByIso].sort((a, b) => a[0] - b[0])) {
+    const saturation = saturationOf(isoFrames);
+    if (!saturation || saturation.reached) continue;
+    problems.push({
+      level: 'warning',
+      message:
+        `ISO ${iso} 这一组没有一张过曝：最亮的一张也只到满量程的 ` +
+        `${(saturation.bestFraction * 100).toFixed(0)}%，四个通道的 σ 都还在往上走，` +
+        '没有任何一个通道被顶住。这样测不到满阱，拟合出来的饱和点只会是「你最亮那张恰好是多少」。' +
+        '请在亮端补拍，直到至少有一个通道过曝为止——均匀面上绿色通道通常最先到。',
+    });
   }
 
   if (levelsByIso.size > 1) {

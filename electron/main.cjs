@@ -63,7 +63,7 @@ const RAW_EXTENSIONS = new Set([
 let esm = null;
 const loadEsm = async () => {
   if (esm) return esm;
-  const [poolMod, pairing, darkCsv, isoGain, ptcPair, entryCsv, zip, exifShutter] =
+  const [poolMod, pairing, darkCsv, isoGain, ptcPair, entryCsv, zip, exifShutter, centreStats] =
     await Promise.all([
     import('./workerPool.mjs'),
     import('../src/analysis/pairing.mjs'),
@@ -73,9 +73,10 @@ const loadEsm = async () => {
     import('../src/output/entryCsv.mjs'),
     import('../src/output/zip.mjs'),
     import('../src/analysis/exifShutter.mjs'),
+    import('../src/analysis/centreStats.mjs'),
   ]);
   esm = { ...poolMod, ...pairing, ...darkCsv, ...isoGain, ...ptcPair, ...entryCsv, ...zip,
-          ...exifShutter };
+          ...exifShutter, ...centreStats };
   return esm;
 };
 
@@ -143,7 +144,7 @@ const listRawFiles = (dir) =>
  * black level -- which is what separates a real dark frame from a lens cap
  * that was not on.
  */
-const scanFrame = (path, readExifShutter) => {
+const scanFrame = (path, readExifShutter, centreChannelStats) => {
   const bytes = readFileSync(path);
   const file = new native.RawFile();
   file.open(bytes);
@@ -162,6 +163,9 @@ const scanFrame = (path, readExifShutter) => {
       ...meta,
       centreAboveBlack: mean - black,
       centreClipFrac: clipped / crop.data.length,
+      // Per CFA position, so saturation can be seen in the one channel that
+      // reaches it first -- on a neutral flat that is usually green.
+      centreChannels: centreChannelStats(crop.data, crop.size, meta.maximum),
       // LibRaw resolves the shutter into one float and which field it came
       // from depends on the camera, so the raw EXIF rationals ride along.
       exifShutter: readExifShutter(bytes),
@@ -198,7 +202,8 @@ ipcMain.handle('pick-files', async () => {
 });
 
 ipcMain.handle('scan-files', async (_event, chosen, entry = 'dark') => {
-  const { groupDarkPairs, groupGainLadder, groupPtcPairs, readExifShutter } = await loadEsm();
+  const { groupDarkPairs, groupGainLadder, groupPtcPairs, readExifShutter, centreChannelStats } =
+    await loadEsm();
 
   // A folder that slipped in (dragged, or an old saved list) is expanded
   // rather than refused.
@@ -233,7 +238,11 @@ ipcMain.handle('scan-files', async (_event, chosen, entry = 'dark') => {
     const name = basename(paths[i]);
     win?.webContents.send('scan-progress', { done: i, total: paths.length, name });
     try {
-      frames.push({ name, path: paths[i], meta: scanFrame(paths[i], readExifShutter) });
+      frames.push({
+        name,
+        path: paths[i],
+        meta: scanFrame(paths[i], readExifShutter, centreChannelStats),
+      });
     } catch (error) {
       failures.push({ name, message: error?.message ?? String(error) });
     }
