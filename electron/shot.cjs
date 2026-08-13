@@ -114,18 +114,41 @@ module.exports = async function runShots(win, app) {
 `);
   let n = 0;
 
+  /*
+   * Chromium stops producing frames for a window it thinks nobody is looking
+   * at, and capturePage then hands back the last one it did produce. That is
+   * worse than the empty PNG below, because a stale frame is a plausible
+   * screenshot of the wrong step. So: force a repaint, and if the bytes come
+   * back identical to the previous shot, say so rather than saving a lie.
+   */
+  let previous = null;
+
   const shot = async (name) => {
     await sleep(400);
-    const img = await win.webContents.capturePage();
+    win.webContents.invalidate();
+    await sleep(250);
+    let png = (await win.webContents.capturePage()).toPNG();
+
+    if (previous && png.equals(previous)) {
+      win.showInactive();
+      win.webContents.invalidate();
+      await sleep(700);
+      png = (await win.webContents.capturePage()).toPNG();
+    }
+    const repeated = previous !== null && png.equals(previous);
+    previous = png;
+
+    const img = { toPNG: () => png, isEmpty: () => png.length === 0, getSize: () => ({ width: 0, height: 0 }) };
     const path = join(dir, `${String(++n).padStart(2, '0')}-${name}.png`);
-    writeFileSync(path, img.toPNG());
+    writeFileSync(path, png);
+    if (repeated) log('WARNING: identical to the previous frame --', path);
     /*
      * capturePage goes through the compositor, which Windows stops driving
      * when the display sleeps -- the run is fine and the PNG is zero bytes.
      * The text of the panel comes from the DOM and does not care, so it is
      * recorded alongside and is what a check should read.
      */
-    log('SHOT', path, img.isEmpty() ? '(EMPTY -- compositor asleep)' : `${img.getSize().width}x${img.getSize().height}`);
+    log('SHOT', path, png.length === 0 ? '(EMPTY -- compositor asleep)' : `${png.length} bytes`);
     const text = await win.webContents.executeJavaScript(`
       (() => {
         const card = [...document.querySelectorAll('.card')]
@@ -174,6 +197,17 @@ module.exports = async function runShots(win, app) {
       await sleep(300);
       await run(clickByText('选择 RAW 文件…'));
       await run(waitFor(`!!document.querySelector('table.mini') || !!document.querySelector('.panel--error')`));
+      // What the scan had to say, before the table it found. On a long ladder
+      // the notes scroll off the top, and they are the part worth reading.
+      await run(`
+        (() => {
+          const el = document.querySelector('.panel--warn, .panel--error, .card .panel');
+          if (!el) return 'nothing to scroll to';
+          el.scrollIntoView({ block: 'center' });
+          return 'scrolled to notes';
+        })()
+      `);
+      await shot(`${tab}-notes`);
       await run(`window.scrollTo(0, document.body.scrollHeight); 'scrolled'`);
       await shot(`${tab}-scanned`);
 
