@@ -309,8 +309,9 @@ export const groupPtcPairs = (frames, options = {}) => {
       problems.push({
         level: 'warning',
         message:
-          `ISO ${iso} 只有 ${levels.size} 个曝光级别。三参数拟合在 15 级以下会很不稳，建议补到 25 级以上，` +
-          '并确保覆盖从接近全黑到刚刚过曝的整个范围。',
+          `ISO ${iso} 只有 ${levels.size} 个曝光级别。三参数拟合在 15 级以下会很不稳。` +
+          '按流程从过曝扫到近黑、每 2 个 1/3 档快门一级，通常能得到 18 级左右——' +
+          '级别不够多半是量程没扫完，而不是拍得不够密。',
       });
     }
   }
