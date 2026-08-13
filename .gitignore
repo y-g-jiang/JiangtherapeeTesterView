@@ -9,3 +9,6 @@ release/
 .DS_Store
 boot.log
 dist2/
+
+# 生成的 PDF（scripts/make-pdf.mjs 可随时重建）
+*.pdf
